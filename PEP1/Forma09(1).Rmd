@@ -1,0 +1,193 @@
+---
+title: "PEP1"
+author: "Pareja 6"
+output: html_document
+date: "2025-12-11"
+---
+
+```{r setup,message=FALSE}
+
+library(ggplot2)
+library(ggpubr)
+library(tidyr)
+library(rcompanion)
+library(ez)
+library(car)
+library(knitr)
+library(purrr)
+library(dplyr)
+library(broom)
+library(emmeans)
+
+
+```
+
+## Pregunta1
+
+La coordinación de Fisica I tiene la precepción que en promedio las calificaciones no son iguales en las diferentes evaluacions al menos para los hombres inscritos en cursos con metodología invertida. Para confirmar esta idea, se les pide seleccionar una muestra aleatoria de 85 observaciones usando semilla 243 y con ella realizar un análisis inferencial paramétrico con 99% de confianza aún cuando no se cumplan las condiciones necesarias, esplicando y justificando cada paso seguido (hipótesis contrastadas, las estadísticas usadas, verificación de condiciones, etc) y entregar una respuesta concreta  y basada en evidencia a la coordinación de la asignatura. 
+
+## Desarrollo P1
+
+```{r}
+datos <- read.csv2("EI-2025-2-PE1-Datos.csv")
+mujeres <- datos[which(datos$sexo == "mujer"),]
+hombres <- datos[which(datos$sexo == "hombre"),]
+hombresInvertida <- hombres[which(hombres$modalidad == "invertida"),]
+set.seed(243)
+hombresMuestraP1 <- sample(hombresInvertida$nota1, 85, replace = FALSE)
+hombresMuestraP2 <- sample(hombresInvertida$nota2, 85, replace = FALSE)
+hombresMuestraP3 <- sample(hombresInvertida$nota3, 85, replace = FALSE)
+
+```
+Primero, formularemos la hipótesis a contrastar. Como se nos pide constrastar el promedio de notas del mismo grupo en diferentes instancias, establecemos las siguientes hipóteis para responder a la pregunta planteada:
+
+Lenguaje natural:
+
+$H_0:$ No hay diferencias significativas en las diferencias de promedios de notas conseguidos por los hombres en la modalidad de aula invertida en las diferentes pruebas realizadas.
+
+$H_A:$ Hay diferencias significativas en las diferencias de promedios de notas conseguidos por los hombres en la modalidad de aula invertida para al menos dos de las pruebas.
+
+Matemáticamente:
+
+
+Sea $\mu_{PX}$ el promedio de notas de la evaluación X:
+
+
+$$H_0: \mu_{d_{P1-P2}} = \mu_{d_{P1-P3}} = \mu_{d_{P2-P3}} = 0$$
+
+$$H_A: \exists X,Y \in \{ P1, P2\} , X \neq Y | \mu_d{_{X-Y}} \neq 0$$
+
+Como estamos trabajando con datos de los mismos estudiantes en diferentes pruebas de la misma asignatura en diferentes tiempos, y queremos comparar el promedio de calificaciones, podríamos aplicar una **prueba ANOVA para muestras correlacionadas**.
+
+Vamos a verificar las condiciones para esta prueba:
+
+1. Escala variable dependiente (intervalos iguales): Como la variable que se está midiendo es una califiación, que cumple con la característica de la escala de razón, entonces es posible asegurar que cumple con ser de intervalos iguales.
+
+2. Observaciones independientes al interior de cada muestra: Las muestras fueron seleccionadas aleatoriamente de una población con datos independientes suponiendo que los estudiantes no se copian.
+
+3. Suponer distribución normal: Para ello, se realizan gráficos Q-Q y test de Shapiro-Wilk para cada una de las muestras. 
+
+```{r}
+Notas <- c(hombresMuestraP1, hombresMuestraP2, hombresMuestraP3) 
+Prueba <- c(rep("P1", length(hombresMuestraP1)), 
+               rep("P2", length(hombresMuestraP2)), 
+               rep("P3", length(hombresMuestraP3)))
+Prueba <- factor(Prueba)
+Caso <- rep(1:85, 3)
+datosLargosNotas <- data.frame(Caso, Prueba, Notas)
+
+qqNotas <- ggqqplot(datosLargosNotas, x = "Notas", y = "Prueba", color = "Prueba", alpha = 0.7, palette = c("steelblue","steelblue1","steelblue4"))
+qqNotas <- qqNotas + facet_wrap(~ Prueba)
+qqNotas <- qqNotas + rremove("x.ticks") + rremove("x.text")
+qqNotas <- qqNotas + rremove("y.ticks") + rremove("y.text")
+qqNotas <- qqNotas + rremove("axis.title")
+print(qqNotas)
+```
+
+
+```{r}
+swP1 <- shapiro.test(hombresMuestraP1)
+swP2 <- shapiro.test(hombresMuestraP2)
+swP3 <- shapiro.test(hombresMuestraP3)
+if(swP1$p.value >= 0.05 && swP2$p.value >= 0.05 && swP3$p.value >= 0.05){
+  cat("Siguen una distribución cercana a la normal")
+}else{
+  cat("No siguen una distribución cercana a la normal ")
+}
+```
+
+4. Esfericidad
+```{r}
+lev_testNotas <- leveneTest(Notas ~ Prueba , datosLargosNotas)
+homogeneidad_varNotas <- tidy(lev_testNotas) |> rename("Chi^2" = statistic)
+cat(paste0("", kable(homogeneidad_varNotas, digits = 3, format = "simple")), sep = "\n")
+```
+
+
+Como se obtiene un p-value mayor a 0.01, se falla en rechazar la hipótesis nula, por lo que se cumple con la condición de esfericidad.
+Como no se cumplió la condición de normalidad, se debería aplicar una prueba alternativa no paramétrica. En este caso, corresponde la prueba de Friedman.
+
+Aún así, aplicaremos la prueba ANOVA según lo indicado en el enunciado.
+
+
+```{r,warning=FALSE}
+ezA <- ezANOVA (data = datosLargosNotas, dv = Notas, wid = Caso ,within = Prueba, return_aov = TRUE )
+aovT <- aov(Notas ~ Prueba + Error(Caso/Prueba),data=datosLargosNotas)
+print(ezA$ANOVA$p)
+```
+
+Como se obtiene un valor p mucho menor a 0.01, se concluye que se rechaza la hipótesis nula en favor de la alternativa con un nivel de confianza del 99%. Por lo tanto se puede decir que el promedios para algún par de pruebas difiere. Para aportar más información, se realizará un procedimiento post-hoc para saber cuáles pruebas difieren.
+
+```{r}
+medias <- emmeans(aovT, "Prueba")
+print(summary(medias, infer = TRUE, level = 0.99, null = mean(datosLargosNotas[["Notas"]])))
+```
+
+Para la prueba 1, el intervalo de confianza corresponde a [3.4,4.17], para la prueba 2 corresponde a [4.03,4.8] y para la prueba 3 corresponde a [3.95,4.72].
+
+```{r}
+hsd <- contrast(medias, method = "pairwise", level = 0.95, adjust = "tukey")
+print(summary(hsd, infer = TRUE))
+```
+
+De lo anterior, es posible observar que existen diferencias significativas entre el promedio de la prueba 1 y 2, ya que su valor p es menor al nivel de significancia (0.01). 
+
+En conclusión, la coordinación de Física I tiene razón en decir que, en promedio, las calificaciones no son iguales en las diferentes evaluaciones al menos para los hombres inscritos en cursos con metodolgía inversa. En particular, existen diferencias significativas entre la prueba 1 y la prueba 2. 
+
+## Pregunta 2
+
+La coordinación también sospecha que en cursos con metodología tradicional, en promedio, hombres y mujeres exhiben similar asitencia a clases. Para confirmar este supuesto se les pide seleccionar una muestra aleatoria de 85 observaciones usando la semilla 247 y con ella realizar un análisis inferencial pertinente con un 95% de confianza explicando y justificando paso a paso el procedimiento seguido y entregar una respuesta basada en evidencia a la coordinación de la asignatura. 
+
+```{r}
+hombresTradicional <- hombres[which(hombres$modalidad == "tradicional"),]
+mujeresTradicional <- mujeres[which(mujeres$modalidad == "tradicional"),]
+set.seed(247)
+hombresTmuestra <- sample(hombresTradicional$asistencia, 85, replace = FALSE)
+mujeresTmuestra <- sample(mujeresTradicional$asistencia, 85, replace = FALSE)
+
+```
+
+Se pide hacer una comparación de los promedios de asistenicia entre hombres y mujeres para la metodología tradicional
+
+$H_{0}$: No existen diferencias en los promedios de asistencia entre hombres y mujeres (Matemáticamente $\mu_{H} - \mu_{M} = 0$)
+
+
+$H_{A}$: Existen diferencias en los promedios de asistencia entre hombres y mujeres (Matemáticamente$\mu_{H} - \mu_{M} \neq 0$)
+
+De esa forma, se aplica una comparación directa entre un grupo H (hombres) y M (mujeres) según un criterio dado (metodología tradicional), así, según lo planteado por el enunciado se presume aplicar una prueba t de Student para muestras independientes con un nivel de significancia del 0,05. 
+
+El trabajo de esta prueba requiere la verificación de las siguientes condiciones:
+
+- **Las observaciones deben ser independientes:** En este caso, las muestras fueron seleccionadas aleatoriamente según lo indicado en el enunciado. 
+
+- **Los datos provienen de una distribución aproximadamente normal:** Para la verificación de esta condición se aplicará una prueba Shapiro-Wilk para ambos grupos de estudio. Así, se obtienen los siguientes resultados:
+(Además, como la variable medida es la asistencia, que corresponde a una variable numérica continua, se cumple con las condiciones de la distribución T)
+
+```{r}
+testHombres <- shapiro.test(hombresTmuestra)
+testMujeres <- shapiro.test(mujeresTmuestra)
+
+```
+
+
+  - **p-value Hombres:** `r testHombres$p.value`
+  - **p-value Mujeres:** `r testMujeres$p.value`
+
+De lo anterior, es posible concluir que la muestra de las mujeres no cumple con ser normal. Por ello, no es posible aplicar una prueba t de student. En su lugar, debemos aplicar una prueba alternativa no paramétrica. En este caso, corresponde una prueba de **suma de rangos de Wilcoxon**. Para ello, se deben cumplir las siguientes condiciones:
+
+- **Observaciones independientes:** En particular, como se menciona de 2 grupos respectivos que fueron seleccionados de manera aleatoria, la selección de uno/a no influyó en la de otro/a persona, así, podemos suponer que las observaciones son independientes.
+- **Escala de medición a lo menos ordinal:** Como se trata de una escala de razón (ya que la variable es un porcentaje), también cumple con la condición de ser ordinal.
+
+```{r}
+testWilcox <- wilcox.test(hombresTmuestra,
+                    mujeresTmuestra, 
+                    paired = F,
+                    alternative = "two.sided",
+                    mu = 0,
+                    conf.level = 0.95)
+testWilcox
+```
+Como el valor p obtenido es menor a 0.05, se rechaza la hipóteis nula en favor de la alternativa con un 95% de confianza. Es decir, existen diferencias significativas entre los promedios de asistencia entre hombres y mujeres.
+
+Por lo tanto, las sospechas de la coordinación no se ven respaldadas con los datos obtenidos, ya que el promedio de asistencia de ambos grupos no es similar. 
+
