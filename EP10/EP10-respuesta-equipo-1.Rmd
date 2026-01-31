@@ -1,0 +1,298 @@
+---
+title: "EP10-respuesta-equipo-1"
+author: "Equipo 1"
+date: "2026-01-17"
+output: html_document
+---
+
+# EP10
+A partir de los datos del EP09, realizar un modelo de regresión logistica simple, eligiendo un predictor en basandose en literatura, luego en base a los predictores elegidos aleatoriamente en el EP09, construir un modelo de regresión logística múltiple.
+
+```{r, message=FALSE}
+library(car)
+library(dplyr)
+library(pROC)
+library(ggpubr)
+
+set.seed(3413)
+
+datos <- read.csv2("EP09 Datos.csv")
+
+# Crear variables IMC y EN
+datos$IMC <- datos$Weight / ((datos$Height/100)**2)
+datos$EN <- ifelse(datos$IMC >= 23.2, "Sobrepeso", "No sobrepeso")
+datos$EN <- factor(datos$EN, levels = c("No sobrepeso", "Sobrepeso"))
+
+# Filtrar hombres
+datos_hombres <- datos %>% filter(Gender == 1)
+
+# Separar por clase
+hombres_sobrepeso <- datos_hombres %>% filter(EN == "Sobrepeso")
+hombres_no_sobrepeso <- datos_hombres %>% filter(EN == "No sobrepeso")
+
+# Seleccionar muestras de sobrepeso de 75 de cada uno
+muestra_sobrepeso <- hombres_sobrepeso %>% sample_n(75)
+muestra_no_sobrepeso <- hombres_no_sobrepeso %>% sample_n(75)
+
+# Crear conjunto de entrenamiento (100 datos: 50 SP + 50 NoSP)
+train_sobrepeso <- muestra_sobrepeso %>% sample_n(50)
+train_no_sobrepeso <- muestra_no_sobrepeso %>% sample_n(50)
+
+train <- bind_rows(train_sobrepeso, train_no_sobrepeso)
+train <- train[sample(nrow(train)), ]
+
+# Crear conjunto de prueba (50 datos: 25 SP + 25 NoSP)
+# Usamos anti_join para tomar los que NO se usaron en train
+test_sobrepeso <- muestra_sobrepeso %>% anti_join(train_sobrepeso)
+test_no_sobrepeso <- muestra_no_sobrepeso %>% anti_join(train_no_sobrepeso)
+
+test <- bind_rows(test_sobrepeso, test_no_sobrepeso)
+test <- test[sample(nrow(test)), ]
+
+cat("Dimensiones train:", nrow(train), "- Distribución:", table(train$EN), "\n")
+cat("Dimensiones test:", nrow(test), "- Distribución:", table(test$EN), "\n")
+
+# Predictores seleccionados al azar en EP anterior
+predictores <- c("Wrist.Minimum.Girth", "Elbows.diameter", "Ankles.diameter", 
+                 "Forearm.Girth", "Navel.Girth", "Calf.Maximum.Girth", 
+                 "Biacromial.diameter", "Knee.Girth")
+```
+
+### Construcción Modelo de Rlogit Simple
+
+Un buen predictor para el estado nutricional es la circunferencia de la cintura, debido a que en esa zona se acomula la mayor cantidad de grasa en el cuerpo en los hombres. Preocupante cuando superan los 90 cm de circunferencia. La cantidad de grasa afecta en el peso de la persona, implicando un cambio en el IMC.
+
+Fuente: https://www.gob.mx/salud/articulos/indicadores-de-sobrepeso-y-obesidad?idiom=es#
+
+La variable mas parecida a esta es "Waist.Girth", la cual representa el grosor al nivel de la cintura, por lo que usaremos ésta variable como predictor del modelo Rlogit simple.
+
+```{r}
+modelo_simple <- glm(EN ~ Waist.Girth, data = train, family = binomial(link="logit"))
+summary(modelo_simple)
+```
+
+Vemos que esta variable por si sola aporta bastante al modelo (Pr(>|t|) mucho menor a nivel de significancia de 0.05 y que se redujo la desviación de 138.628 del modelo nulo a 91.732.
+
+## Elección de variables y Construcción de Modelo de Rlogit Múltiple
+
+Para elegir las variables predictoras que se van a agregar al modelo se usará regresión escalonada, que busca golosamente el mejor modelo entre uno con solamente "Waist.Girth", hasta uno que considera todos los posibles predictores. Las decisiones de incluir o quitar predictores se basa en obtener el menor AIC posible, ya que éste refleja la complejidad del modelo y queremos seguir el principio de parsimonia.
+
+```{r}
+formula_scope <- as.formula(paste("EN ~ Waist.Girth +", 
+                                  paste(predictores, collapse = " + ")))
+
+modelo_multiple <- step(modelo_simple, 
+                   scope = list(lower = modelo_simple, upper = formula_scope), 
+                   direction = "both", 
+                   trace = 1
+                   )
+
+summary(modelo_multiple)
+
+```
+
+Se obtuvo un modelo con 5 variables predictoras (Waist.Girth, Forearm.Girth, Biacromial.diameter, Calf.Maximum.Girth, Elbows.diameter) y se logró disminuír la desviación en más de la mitad respecto al modelo nulo.
+
+
+## Confiabilidad del modelo
+
+### Modelo RlogitS:
+
+1. Debe existir una relación lineal entre el predictor y la respuesta tranformada:
+```{r}
+residualPlots(modelo_simple, fitted = FALSE)
+crPlots(modelo_simple)
+```
+
+De los gráficos y de los resultados de las pruebas de curvatura, podemos decir que el predictor presenta una leve curvatura, pero no significativa, por lo que el podemos decir con un 95% de confianza que el predictor está relacionado linealmente con la respuesta transformada. Cabe mencionar que existe una forma peculiar en la distribución de los residuos del predictor, similar a la función 1/x.
+
+
+
+2. Los residuos deben ser independientes entre sí: 
+```{r}
+durbinWatsonTest(modelo_simple)
+```
+Para verificar el supuesto de independencia de los residuos se aplicó la prueba de Durbin-Watson y se obtuvo un estadístico D-W de 2.36 y un p-value de 0.052. Dado que el p-value obtenido es mayor que el nivel de significancia alpha = 0.05, no existe evidencia suficiente para rechazar la hipótesis nula de independencia. Sin embargo dicho valor está muy cerca de nuestro nivel de significancia, por lo que no es muy seguro el resultado y por consecuencia su interpretación. Por lo tanto, se concluye con una alta probabilidad de equivocarse que los residuos no presentan una autocorrelación significativa y no se puede rechazar la independencia.
+
+
+3. Revisar que no exista multicolinealidad fuerte: Como sólo se tiene un predictor, saltamos ésta verificación.
+
+
+4. Vemos que no hay información incompleta, ya que tenemos más de 15 observaciones para cada predictor.
+
+
+5. Verificar que no hay separación perfecta:
+Nuestro modelo no arroja mensajes de advertencia sobre probabilidades numéricas de 0 o 1 , ni presenta coeficientes con estadísticos muy grandes o valores-p iguales a 1. Como no existen éstas señales de alarma, se puede decir que no hay separación perfecta.
+
+
+6. Evaluación de la presencia de casos influyentes:
+
+```{r}
+influencePlot(modelo_simple)
+```
+
+Examinando el data frame y el gráfico generados por influencePlot se logra identificar que ninguna observación tiene un apalancamiento superior a una o dos veces el promedio y tampoco superan el umbral crítico de la Distancia de Cook. Por lo tanto, aunque existen valores inusuales, ninguno ejerce un dominio desmedido sobre la estimación de los coeficientes, lo que indica robustez y confiabilidad en el modelo.
+
+Éste modelo de Rlogit Simple presenta algunas carencias respecto a su confiabilidad, tales como leves curvaturas, y el valor p cercano al nivel de significancia en la prueba de independencia de residuos de Durbin-Watson. Podemos decir que es un modelo que cumple a nivel significativo pero podría predecir incorrectamente la variable de respuesta.
+
+
+### Modelo RlogitM:
+
+1. Debe existir una relación lineal entre los predictores y la respuesta tranformada:
+```{r}
+residualPlots(modelo_multiple, fitted = FALSE)
+crPlots(modelo_multiple)
+```
+
+De los gráficos y de los resultados de las pruebas de curvatura, podemos decir que todos los predictores están relacionados linealmente con la respuesta transformada.
+
+
+
+2. Los residuos deben ser independientes entre sí: 
+```{r}
+durbinWatsonTest(modelo_multiple)
+```
+Para verificar el supuesto de independencia de los residuos se aplicó la prueba de Durbin-Watson y se obtuvo un estadístico D-W de 2.32 y un p-value de 0.1. Dado que el p-value obtenido es mayor que el nivel de significancia alpha = 0.05, no existe evidencia suficiente para rechazar la hipótesis nula de independencia. Por lo tanto, se concluye que los residuos no presentan una autocorrelación significativa y no se puede rechazar la independencia.
+
+
+3. Revisar que no exista multicolinealidad fuerte:
+```{r}
+vif(modelo_multiple)
+```
+
+Para detectar posibles problemas de correlación entre las variables predictoras, se analizó el VIF. Como se observa en los resultados, todos los predictores presentan valores de VIF bajos, que varían entre 1.08 (Calf.Maximum.Girth) y 1.59 (Forearm.Girth).
+
+Dado que estos valores están por debajo del umbral de preocupación (5), se concluye que no existe multicolinealidad preocupante en el modelo. Esto nos garantiza que cada variable predictora está aportando su propia información al modelo, y no replica lo que predicen las demás.
+
+
+4. Vemos que no hay información incompleta, ya que tenemos más de 15 observaciones para cada predictor.
+
+
+5. Verificar que no hay separación perfecta:
+Nuestro modelo no arroja mensajes de advertencia sobre probabilidades numéricas de 0 o 1 , ni presenta coeficientes con estadísticos muy grandes o valores-p iguales a 1. Como no existen estas señales de alarma, se puede decir que no hay separación perfecta.
+
+```{r}
+influencePlot(modelo_multiple)
+```
+
+
+6. Evaluación de la presencia de casos influyentes: Examinando el data frame y el gráfico generados por influencePlot se logra identificar algunas observaciones con un apalancamiento superior a dos veces el promedio, lo que indica valores atípicos en los predictores. Sin embargo ninguna observación superó el umbral crítico de la Distancia de Cook. Por lo tanto, aunque existen valores inusuales, ninguno ejerce un dominio desmedido sobre la estimación de los coeficientes, lo que sugiere robustez y confiabilidad del modelo ajustado.
+
+Como se pudieron confirmar las 6 condiciones sin problemas raros como los encontrados en el modelo simple, podemos decir que el modelo de Rlogit Múltiple es más confiable que el modelo de Rlogit simple.
+
+## Capacidad Predictiva
+
+Ahora, se evaluará la capacidad predictiva de los modelos con los datos de entrenamiento y con los datos de prueba.
+
+Para ello se graficarán las curvas ROC de los modelos ajustados con los datos de entrenamiento y datos de prueba. Ésto con el fin de descartar problemas de sobreajuste (overfitting).
+
+Finalmente se van a comparar las curvas ROC de los modelos ajustados con los datos de prueba con el fin de saber cuál modelo tiene una mejor capacidad predictiva.
+
+
+### Modelo RlogitS
+
+#### Datos de entrenamiento
+```{r}
+probs_ent_s <- fitted(modelo_simple)
+
+# Graficar curva ROC indicando AUC obtenido
+ROC_ent_s <- roc(response = train$EN,
+                predictor = probs_ent_s,
+                levels = c("No sobrepeso", "Sobrepeso"), direction = "<")
+
+
+g_ROC_ent_s <- ggroc(ROC_ent_s, color = "steelblue")
+g_ROC_ent_s <- g_ROC_ent_s + geom_abline(intercept = 1, slope = 1,
+                           color = "steelblue", linetype = "dashed")
+
+g_ROC_ent_s <- g_ROC_ent_s + xlab("Especificidad") + ylab("Sensibilidad")
+
+texto_ent <- sprintf("AUC = %.2f", ROC_ent_s[["auc"]])
+g_ROC_ent_s <- g_ROC_ent_s + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_ROC_ent_s <- g_ROC_ent_s + theme_pubr()
+
+print(g_ROC_ent_s)
+```
+
+#### Datos de prueba
+```{r}
+probs_pru_s <- predict(modelo_simple, test, type = "response")
+
+# Graficar curva ROC indicando AUC obtenido
+ROC_pru_s <- roc(response = test$EN,
+                predictor = probs_pru_s,
+                levels = c("No sobrepeso", "Sobrepeso"), direction = "<")
+
+
+g_ROC_pru_s <- ggroc(ROC_pru_s, color = "steelblue")
+g_ROC_pru_s <- g_ROC_pru_s + geom_abline(intercept = 1, slope = 1,
+                           color = "steelblue", linetype = "dashed")
+
+g_ROC_pru_s <- g_ROC_pru_s + xlab("Especificidad") + ylab("Sensibilidad")
+
+texto_ent <- sprintf("AUC = %.2f", ROC_pru_s[["auc"]])
+g_ROC_pru_s <- g_ROC_pru_s + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_ROC_pru_s <- g_ROC_pru_s + theme_pubr()
+
+print(g_ROC_pru_s)
+
+```
+
+Ambas curvas ROC del modelo simple (con los datos de entrenamiento y de prueba) presentan el mismo AUC, lo que sugiere que el modelo no está sobreajustado y generaliza adecuadamente.
+
+
+### Modelo RlogitM
+
+#### Datos de entrenamiento
+```{r}
+probs_ent <- fitted(modelo_multiple)
+
+# Graficar curva ROC indicando AUC obtenido
+ROC_ent <- roc(response = train$EN,
+                predictor = probs_ent,
+                levels = c("No sobrepeso", "Sobrepeso"), direction = "<")
+
+
+g_ROC_ent <- ggroc(ROC_ent, color = "steelblue")
+g_ROC_ent <- g_ROC_ent + geom_abline(intercept = 1, slope = 1,
+                           color = "steelblue", linetype = "dashed")
+
+g_ROC_ent <- g_ROC_ent + xlab("Especificidad") + ylab("Sensibilidad")
+
+texto_ent <- sprintf("AUC = %.2f", ROC_ent[["auc"]])
+g_ROC_ent <- g_ROC_ent + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_ROC_ent <- g_ROC_ent + theme_pubr()
+
+print(g_ROC_ent)
+```
+
+#### Datos de prueba
+```{r}
+probs_pru <- predict(modelo_multiple, test, type = "response")
+
+# Graficar curva ROC indicando AUC obtenido
+ROC_pru <- roc(response = test$EN,
+                predictor = probs_pru,
+                levels = c("No sobrepeso", "Sobrepeso"), direction = "<")
+
+
+g_ROC_pru <- ggroc(ROC_pru, color = "steelblue")
+g_ROC_pru <- g_ROC_pru + geom_abline(intercept = 1, slope = 1,
+                           color = "steelblue", linetype = "dashed")
+
+g_ROC_pru <- g_ROC_pru + xlab("Especificidad") + ylab("Sensibilidad")
+
+texto_ent <- sprintf("AUC = %.2f", ROC_pru[["auc"]])
+g_ROC_pru <- g_ROC_pru + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_ROC_pru <- g_ROC_pru + theme_pubr()
+
+print(g_ROC_pru)
+
+```
+
+Ambas curvas Roc del modelo múltiple (con los datos de entrenamiento y de prueba) presentan un AUC muy similar, aunque no sea igual podemos sugerir que el modelo no esta sobreajustado y generaliza adecuadamente.
+
+Sabemos que el modelo simple y el modelo múltiple no están sobreajustados y que generalizan adecuadamente, pero queremos saber cuál predice mejor la variable de respuesta. Podemos observar que el AUC del modelo simple con los datos de prueba es de 0.85 y que el AUC del modelo múltiple con los datos de prueba es 0.92. Ambos estan cercanos a 1, lo cual indica buena calidad predictiva. Sin embargo el AUC del modelo de RlogitM es mayor que el del modelo de RlogitS, por lo que podemos concluir que el modelo múltiple tiene una mejor calidad predictiva que el modelo simple.
+
+
+Para concluir podemos decir que el modelo múltiple mejora el desempeño del modelo simple en el cual se basa, lo que indica que las variables adicionales aportan información relevante para explicar y/o predecir la variable respuesta. Algunas causas por la que decimos ésto es porque hay mayor evidencia de que los residuos son independientes entre ellos y el AUC es mayor en el modelo de RlogitM.

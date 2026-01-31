@@ -1,0 +1,222 @@
+---
+title: "EI-EP08-respuesta-equipo-2"
+output: html_document
+date: "2025-12-03"
+---
+
+```{r}
+library(ggplot2)
+library(DT) #Para hacer tablas
+library(plotly)
+library(dplyr)
+library(tibble)
+library(purrr)
+library(rsample)
+library(glue)
+library(tidyr)
+library(ggpubr)
+
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+```
+
+- y27a - cuenta de ahorro
+- e8 - tipo de institución
+- region - región
+- o10. ¿Cuántas horas trabaja habitualmente por semana en su trabajo, negocio o actividad principal?
+
+
+# Pregunta 1
+
+Se quiere estudiar si la cantidad de personas que han realizado su educación superior en centros de formación ténica o institutos profesionales y tienen una cuenta de ahorro son las mismas en las regiones de Tarapacá y Metropolitana. Lo anterior, con el fin de comprender si se puede extraer información sobre la educación financiera de los estudiantes en pos de realizar una mejora de ser necesario. En este caso, nuestro indicador correspondería al hecho de tener una cuenta de ahorro como de señal de buenas prácticas de manejor de economía personal.
+
+Para ello se estudiará la cantidad de personas que tiene una cuenta de ahorro que ha realizado su educación superior en un centro de formación técnica o instituto profesional, y ver si es similar en la región de Tarapacá y la región Metropolitana. 
+
+
+Para lo anterior, se extraen los datos necesarios para llevar a cabo un análisis. En este caso:
+
+- Columna y27a: Corresponde a una variable categórica nominal de tres niveles que son: Sí, No, No sabe/no responde. Nos indica si la persona tiene o no una cuenta de ahorro.
+- Columna e8: Corresponde a una variable cualitativa nominal que se refiere a la institución donde se llevó a cabo la enseñanza media, en este caso los niveles son:
+  1) Centro de Formación Técnica
+  2) Instituto Profesional
+  3) Universidad privada no perteneciente al Consejo de Rectores (Cruch)
+  4) Universidad privada perteneciente al Consejo de Rectores (Cruch)
+  5) Universidad Estatal
+  6) Establecimiento de educación superior de las Fuerzas Armadas y del Orden
+  7) Universidad Extranjera
+  8) No sabe/no responde
+  En particular, para esta variable nos interesa el nivel 2, que corresponde a un instituto profesional y el nivel 1 que corresponde a un centro de formación técnica. 
+  - Columna "region": Corresponde a una variable cualitativa nominal que indica la región en la que reside el encuestado. Existen trece niveles de acuerdo a las regiones de Chile. En este estudio, sólo nos interesan los niveles "Región de Tarapacá" y "Región Metropolitana de Santiago".
+
+```{r}
+regiones_filtradas <- datos %>%
+  filter(region %in% c(
+    "Región Metropolitana de Santiago",
+    "Región de Tarapacá"
+  ))
+
+datosRelevantes <- data.frame(
+  id_vivienda = regiones_filtradas$id.vivienda,
+  y27a = regiones_filtradas$y27a,
+  e8 = regiones_filtradas$e8,
+  region = regiones_filtradas$region
+)
+
+
+datos_filtrados <- datosRelevantes %>%
+  filter(e8 == "Instituto Profesional" | e8 == "Centro de Formación Técnica")
+```
+  
+Primero, extraeremos una muestra aleatoria de entre 100 y 150 muestras para el estudio según lo indicado en el enunciado. La semilla elegida corresponderá a los últimos tres números del rut de uno de los integrantes.
+
+```{r}
+set.seed(234)
+
+muestra <- datos_filtrados[sample(nrow(datos_filtrados), 125, replace = FALSE),]
+
+```
+
+Para responder a la pregunta se hará una prueba de permutaciones de Monte Carlo.
+ Enunciamos nuestras hipotesis y nuestro parámetro a estudiar:
+ 
+Queremos ver si la cantidad de personas que haya tenido estudios superiores en centros de formación técnica que tenga cuenta de ahorro es la misma para las poblaciones de la region Metropolitana y la region de Tarapacá, por lo que estaremos infiriendo sobre las medias de estas para compararlas.
+ 
+ $H_0$ : La frecuencia de personas con estudios superiores que tenga cuenta de ahorro es similar para la región Metropolitana que en la de Tarapacá.
+
+Matemáticamente: $\mu_M = \mu_T$
+ 
+ $H_a$ : La frecuencia de personas con estudios superiores que tenga cuenta de ahorro difiere para la región Metropolitana la de Tarapacá.
+ 
+Matemáticamente: $\mu_M \neq \mu_T$
+
+Luego creamos las permutaciones sin reposición, en este caso usaremos 5999 remuestras.
+
+```{r}
+muestra_metropolitana <- muestra %>%
+  filter(region == "Región Metropolitana de Santiago")
+
+muestra_tarapaca <- muestra %>%
+  filter(region == "Región de Tarapacá")
+
+y27a_metropolitana <- muestra_metropolitana$y27a
+y27a_tarapaca <- muestra_tarapaca$y27a
+
+Muestra <- factor(c(rep("Metropolitana", length(y27a_metropolitana)), rep("Tarapacá", length(y27a_tarapaca))))
+
+datos_largos <- tibble(Muestra, y27a = c(y27a_metropolitana, y27a_tarapaca))
+
+datos_largos <- datos_largos |>
+  mutate(
+    y27a_bin = case_when(
+      y27a == "Si" ~ 1,
+      y27a == "No" ~ 0,
+      y27a == "No sabe/No responde" ~ 0,
+      TRUE ~ NA_real_
+    )
+  ) |>
+  filter(!is.na(y27a_bin))
+
+R = 5999
+remuestras <- permutations(datos_largos, permute = Muestra, times = R, apparent=TRUE)
+
+dif_dos_medias <- function(remuestra, ...) {
+  analysis(remuestra) |>
+    group_by(Muestra) |>
+    summarise(m = mean(y27a_bin)) |>
+    summarise(m[1] - m[2]) |>
+    pull()
+}
+
+dist_perm <- remuestras |> mutate(dif_m = map(splits, dif_dos_medias)) |> unnest( dif_m)
+
+dif_obs <- dist_perm |> filter(id == "Apparent") |> pull(dif_m)
+
+n_extremos <- dist_perm |> filter(abs(dif_m) >= abs(dif_obs)) |> summarise (n = n ())
+
+IC <- quantile(dist_perm$dif_m, probs = c(0.025, 0.975))
+p_valor <- n_extremos / (R + 1)
+p_valor <- p_valor$n
+cat("Intervalo de confianza por percentiles: [", IC, "]", "\n p-value =", p_valor, "\n")
+```
+
+```{r}
+titulo <- paste("Contraste de hipótesis usando", R, "permutaciones")
+
+y27a <- if_else(
+  p_valor < 0.001,
+  glue("italic(p) ~ '<' ~ 0.001"),
+  glue("italic(p) == {sprintf('%.3f', p_valor)}")
+)
+
+ancho_barra <- diff(range(dist_perm[["dif_m"]])) /
+  nclass.scott(dist_perm[["dif_m"]])
+
+ancho_barra_ajustado <- abs(dif_obs) /
+  max(1, round(abs(dif_obs) / ancho_barra))
+
+dist_perm_pl <- dist_perm |>
+  mutate(
+    extremo = factor(if_else(abs(dif_m) >= abs(dif_obs), 1, 0))
+  ) |>
+  ggplot(aes(x = dif_m)) +
+  geom_histogram(
+    aes(alpha = extremo),
+    boundary = 0,
+    binwidth = ancho_barra_ajustado,
+    #bins = 19,
+    color = "steelblue4",
+    fill = "steelblue"
+  ) +
+  labs(
+    title = titulo,
+    x = "Diferencia de dos medias",
+    y = "Frecuencia"
+  ) +
+  geom_vline(
+    xintercept = c(-dif_obs, dif_obs),
+    colour = "steelblue4",
+    linetype = "dashed"
+  ) +
+  annotate(
+    "text",
+    x = dif_obs,
+    y = Inf,
+    hjust = 1.2,
+    vjust = 2,
+    label = y27a,
+    parse = TRUE
+  ) +
+  scale_alpha_manual(values = c("0" = 0.2, "1" = 1), guide = NULL) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme_pubr()
+
+print(dist_perm_pl)
+
+```
+
+Concluyendo, se puede decir con un 95% de confianza que no se rechaza la hipotesis nula. Es decir, no hay suficiente evidencia que respalde que la cantidad de personas con estudios superiores que tenga una cuenta de ahorro difiere para la región Metropolitana y la región de Tarapacá.
+
+# Pregunta 2
+
+Saber si el promedio de horas trabajadas habitualmente por semana es similar o diferente entre mujeres solteras, casadas y separadas en Chile.
+
+```{r}
+datos_filtrados2 <- datos %>% 
+  filter(sexo == "Mujer" & !is.na(o10) & 
+           (ecivil == "Casado(a)" | 
+              ecivil == "Separado(a)" | 
+              ecivil == "Soltero(a)"))
+
+datosRelevantes2 <- data.frame(
+  id_vivienda = datos_filtrados2$id.vivienda,
+  ecivil = datos_filtrados2$ecivil,
+  o10 = datos_filtrados2$o10
+)
+```
+
+Ahora usaremos como semilla los últimos tres dígitos del rut del otro estudiante para obtener una muestra de 250 individuos.
+```{r}
+set.seed(413)
+
+muestra2 <- datosRelevantes2[sample(nrow(datosRelevantes2), 250, replace = FALSE),]
+```
+

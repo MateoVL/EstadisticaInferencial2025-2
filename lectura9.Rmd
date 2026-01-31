@@ -1,0 +1,51 @@
+---
+title: "lectura 9"
+author: "Mateo Valle"
+date: "2025-12-14"
+output: html_document
+---
+
+El conjunto de datos diet del paquete WRS2 contiene datos de la pérdida de peso conseguida por tres tipos de dietas. Usando bootstrapping, determina si la pérdida de peso conseguida por las mujeres con las dietas A y C es la misma.
+
+Queremos saber si la diferencia entre las medias entre la dietas A y C es significativamente distinta de 0 en mujeres.
+
+Como inferimos con la diferencia de medias de dos grupos, usariamos bootstrapping para dos muestras independientes.
+
+
+
+```{r}
+library(WRS2)
+library(boot)
+library(ggpubr)
+library(glue)
+library(rsample)
+library(rstatix)
+library(purrr)
+library(dplyr)
+
+
+data(diet)
+
+mujeres <- diet[which(diet$gender == "Female"),]
+
+A <- mujeres$weight.loss[mujeres$diet.type == "A"]
+C <- mujeres$weight.loss[mujeres$diet.type == "C"]
+
+
+Muestra <- factor(c(rep("Dieta A", length(A)), rep("Dieta C", length(C))))
+datos_largos <- tibble(Muestra, Peso=c(A, C))
+
+B <- 4999
+set.seed(123)
+remuestras <- bootstraps(datos_largos, times=B, strata=Muestra, apparent=TRUE)
+
+dif_dos_medias <- function(remuestra, ...){
+  analysis(remuestra) |> group_by(Muestra) |>
+    summarise(n=n(), m=mean(Peso), v=var(Peso)) |>
+    summarise(term="Dif.2medias", estimate=m[1] - m[2], std.error=sqrt(sum(v/n)))
+}
+# Obtener la distribuci ó n bootstrap de la diferencia de las medias
+dist_bt <- remuestras |> mutate(stats=map(splits, dif_dos_medias))
+dist_bt_tbl <- dist_bt | > select ( - splits ) | > unnest ( cols = stats )4243 # Obtener y mostrar las estad í sticas de la distribuci ó n bootstrap44 dif_obs <- dist_bt_tbl | > filter ( id == " Apparent " ) | > pull ( estimate )45 dist_b t_stats <- dist_bt_tbl | > filter ( id ! = " Apparent " ) | >46 summarise ( Dif_obs = dif_obs , Dif_bt = mean ( estimate ) , Dif_bt_es = sd ( estimate ) ) | >47 mutate ( Sesgo = Dif_bt - Dif_obs , .before = 3) | > map_df ( ~ num ( .x , digits = 4) )
+```
+

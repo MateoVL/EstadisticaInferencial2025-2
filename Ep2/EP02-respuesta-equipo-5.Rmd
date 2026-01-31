@@ -1,0 +1,274 @@
+---
+title: "EP02-respuesta-equipo-5"
+author: "Francisca Cavieres y Mateo Valle"
+date: "2025-08-28"
+output: html_document
+---
+# Actividad 2
+
+```{r, message=FALSE,warning=FALSE}
+library(TeachingDemos)
+library(ggpubr)
+library(plotly)
+datos <- read.csv2("EP02 Datos.csv")
+```
+
+Antes de comenzar, es necesario analizar la naturaleza de las variables involucradas, donde:
+
+- Zona: Variable Categórica
+- Previo: Variable numérica 
+- Posterior: Variable numérica
+
+
+
+### 1. El Comité Olímpico cree que el mejor tiempo medio de los atletas de la zona Centro-Sur después de ingresar al programa de entrenamiento es superior a 14,9 segundos. ¿Soportan los datos esta afirmación?
+
+Para responder a esta pregunta, se quiere realizar una prueba de contraste a hipótesis. Para ello, se formula lo siguiente:
+
+H_0: La media de los mejores tiempos posteriores al programas es igual a 14,9 segundos
+H_A: La media de los mejores tiempos posteriores al programa es mayor a 14,9 segundos
+
+$$H_0: \mu_D = 14.9$$
+$$H_A: \mu_D > 14.9$$
+
+Para saber qué tipo de prueba llevar a cabo, es necesario estudiar la naturaleza de los datos.
+```{r}
+centroSur <- datos[which(datos$Zona == "Centro-Sur"),]
+
+```
+
+Primero, es posible notar que la cantidad de observaciones de la muestra es mayor a 30. Además, se asume que la medición del mejor tiempo de cada atleta no influye en el rendimiento de los demás, por lo que los datos son independientes entre sí. Por otro lado, para saber si los datos siguen una distribución cercana a la normal, se hará una prueba de Shapiro-Wilk así como una análisis del gráfico Q-Q asociado. Ya que no es tan grave cometer un error de tipo I, decidimos establecer un nivel de significación de 0.05. 
+
+Prueba Shapiro-Wilk: 
+```{r}
+sw <- shapiro.test(centroSur$Posterior)
+sw
+```
+Con el valor p obtenido (p > 0.05), se concluye que los datos no se alejan mucho de la distribución normal. 
+
+Q-Q plot:
+```{r}
+library(ggpubr)
+qqPost <- ggqqplot(data = centroSur, x = "Posterior", 
+              title = "grafico QQ tiempo posterior",
+              color = "steelblue", alpha = 0.7)
+qqPost
+```
+
+Nuevamente, se observa que los datos se acercan bastante a la distribución normal, con lo que podemos concluir con seguridad que su distribución se asemeja a una normal.
+
+Considerando las característica de los datos, es posible aplicar una prueba Z, asumiendo la varianza observada en la muestra como la correspondiente a la varianza de la población.
+```{r}
+var <- var(centroSur$Posterior)
+var
+```
+
+```{r}
+desv <- sd(centroSur$Posterior)
+media <- mean(centroSur$Posterior)
+vn <- 14.9
+Z <- (media - vn)/(desv/sqrt(81))
+Z
+```
+
+```{r}
+p <- pnorm(Z, lower.tail = FALSE)
+p
+```
+Para asegurarnos del resultado obtenido, se realizó la prueba con la función z.test. 
+
+```{r}
+ztest <- z.test(centroSur$Posterior, 14.9, desv, "greater", 0.95)
+ztest
+```
+De lo anterior, se conlcuye que no hay suficiente evidencia para rechazar la hipótesis nula. Es decir, el mejor promedio no es superior a 14.9 [s].
+
+Intervalo de confianza
+```{r}
+se <- desv/sqrt(81)
+zcrit <- qnorm(0.05,mean = 0 ,sd =1,lower.tail=FALSE)
+lowerBound <- media - zcrit * se
+lowerBound
+```
+De esta forma, se obtiene que el intervalo de confianza corresponde a 
+$$[ 13,268; +\infty]$$
+Con lo que podemos decir con un 95% de confianza que la media real es mayor a 13,268. Sin embargo, no se puede asegurar que sea mayor a 14,9. 
+
+Finalmente, como el valor p obtenido con el estadístico de prueba y la función de R es mayor a 0.05, no hay evidencia suficiente para rechazar la hipótesis nula. Por lo tanto, es posible concluir que el promedio de los atletas después del programa de entrenamiento no es mayor a 14.9 [s]. Además, considerando el intervalo de confianza, es posible asegurar que el valor real es mayor a 13,268 [s]. 
+
+
+### 2 ¿Sugieren los datos que la mejor marca de los atletas de la zona Sur se reduce en promedio menos de 1,3 segundos tras el entrenamiento?
+
+
+
+Selección de hipótesis:
+H0: La media de la diferencia entre tiempo previo y posterior de los atletas es igual a 1.3 segundos.
+Ha: La media de la diferencia entre tiempo previo y posterior de los atletas es menor a 1.3 segundos.
+
+$$H_0: \mu_{prev} - \mu_{post} = 1.3$$
+$$H_A: \mu_{prev} - \mu_{post} < 1.3 $$
+### Selección de prueba
+
+Primero, es importante notar que los datos son pareados, dado que cada observación de la primera muestra, tiene una relación con una de la segunda muestra. De la pregunta 1, se sigue asumiendo la independencia de las muestras. Por lo anterior, decidimos aplicar una prueba t para muestras pareadas.
+
+Verificamos normalidad de la diferencia muestra
+```{r}
+
+sur <- datos[which(datos$Zona == "Sur"),]
+
+surPrev <- sur$Previo
+surPost <- sur$Posterior
+
+diferencia <- surPrev - surPost
+
+
+shapiro.test(diferencia)
+
+
+
+qqDif <- ggqqplot(data = data.frame(diferencia), x = "diferencia", 
+              title = "Gráfico QQ diferencia de tiempo",
+              color = "steelblue", alpha = 0.7)
+qqDif
+
+```
+
+Con todo lo anterior, es posible concluir que los datos se comportan parecido a una distribución normal. Es por esto que es posible aplicar la prueba t para muestras pareadas. 
+
+```{r}
+valorNulo <- 1.3
+testPareados <- t.test(diferencia, alternative = "less", mu = valorNulo, conf.level = 0.95)
+testPareados
+```
+
+Después de la prueba de contraste de hipótesis, es posible observar que el valor p asociado a la diferencia de las muestras es mayor al nivel de significancia, por lo que no hay evidencia suficiente para rechazar la hipótesis nula. Es decir, el valor real del promedio de la diferencia de ambas muestras no es menor a 1.3. Además, considerando el intervalo de confianza, se concluye que con un 95% de confianza, el valor real del promedio de la diferencia es menor a 1.7 [s]. Por lo tanto, no es posible afirmar que las mejores marcas se reducen en menos de 1.3 segundos, pero sí es posible afirmar que se encuentran dentro del intervalo encontrado.
+
+### 3.¿Es posible afirmar que, en promedio, los atletas de la zona Sur superaban a los de la zona Centro-Sur por más de 5,8 segundos antes del entrenamiento?
+H0: la diferencia de los promedios de las distintas zonas es igual a 5.8
+Ha: la diferencia de los promedios de las distintas zonas es mayor a 5.8
+
+$$H_0: \mu_{Sur} - \mu_{CSur} = 5.8$$
+$$H_A: \mu_{Sur} - \mu_{Csur} > 5.8$$
+Donde $\mu_{Sur}$ corresponde al promedio de los atletas de la zona Sur, y $\mu_{CSur}$ corresponde al promedio de los atletas de la zona Centro-Sur. 
+```{r}
+
+shapiro.test(centroSur$Previo)
+
+
+qqCs <- ggqqplot(data = centroSur, x = "Previo",
+                    title = "Grafico QQ ",
+                    color = "steelblue", alpha = 0.7)
+qqCs
+```
+
+```{r}
+
+shapiro.test(sur$Previo)
+
+
+qqS <- ggqqplot(data = sur, x = "Previo",
+                    title = "Grafico QQ ",
+                    color = "steelblue", alpha = 0.7)
+qqS
+```
+
+```{r}
+testCS <- t.test(centroSur$Previo, sur$Previo, paired = FALSE, alternative = "greater", mu = 5.8, conf.level = 0.95)
+testCS
+```
+
+Se concluye que no existe evidencia suficiente para rechazar la hipótesis nula. Por lo tanto, se puede afirmar que en promedio, los atletas de la zona sur no superan a los de la zona centro-sur por más de 5.8 segundos. Sin embargo, el valor real es mayor a 5 [s].
+
+
+### 4. ¿Será cierto que hay más atletas de la zona Centro-Sur que redujeron sus mejores marcas en al menos 4,8 segundos que atletas de la zona Centro-Norte que lo hicieron en al menos 3,2 segundos?
+
+Para responder a la pregunta, es pertinente realizar una análisis descriptivo de los datos. De esta forma, se tiene lo siguiente:
+
+Para la zona Centro-Sur
+```{r}
+difCS <- centroSur$Previo - centroSur$Posterior
+exitosDifCS <-difCS[which(difCS >= 4.8)]
+fracasosDifCS <- difCS[which(difCS < 4.8)]
+cantExitosCS <- length(exitosDifCS)
+cantMuestraCS <- length(centroSur$Zona)
+cantFracasosCS <- cantMuestraCS - cantExitosCS
+probExitoCS <- cantExitosCS/cantMuestraCS
+
+dfCS <- data.frame(
+  Resultado = c("Éxitos", "Fracasos"),
+  Cantidad = c(cantExitosCS, cantFracasosCS)
+)
+
+fig1 <- plot_ly(dfCS, 
+               x = ~Resultado, 
+               y = ~Cantidad, 
+               type = "bar",
+               text = ~Cantidad, 
+               textposition = "auto",
+               marker = list(color = c("#2ca02c", "#d62728"))) %>% 
+  layout(title = "Resultados en Zona Centro-Sur",
+         xaxis = list(title = "Categoría"),
+         yaxis = list(title = "Cantidad de personas"))
+
+fig1
+```
+
+Para la zona Centro-Norte
+```{r}
+
+CN <- datos[which(datos$Zona == "Centro-Norte"),]
+CNprevio <- CN$Previo
+CNpost <- CN$Posterior
+difCN <- CNprevio - CNpost
+
+exitosCN <- length(difCN[which(difCN >= 3.2)])
+fracasosCN <- length(difCN[which(difCN < 3.2)])
+
+dfCN <- data.frame(
+  Resultado = c("Éxitos", "Fracasos"),
+  Cantidad = c(exitosCN, fracasosCN)
+)
+
+fig <- plot_ly(dfCN, 
+               x = ~Resultado, 
+               y = ~Cantidad, 
+               type = "bar",
+               text = ~Cantidad, 
+               textposition = "auto",
+               marker = list(color = c("#2ca02c", "#d62728"))) %>% 
+  layout(title = "Resultados en Zona Centro-Norte",
+         xaxis = list(title = "Categoría"),
+         yaxis = list(title = "Cantidad de personas"))
+
+fig
+
+totalCN <- exitosCN + fracasosCN
+
+porcentajeExitoCN <- exitosCN / totalCN
+porcentajeExitoCN
+porcentajeFracasoCN <- fracasosCN / totalCN
+porcentajeFracasoCN
+
+```
+Ahora, haremos una comparación de las proporciones de éxito y fracaso en cada caso. 
+```{r}
+
+difProporcion <- probExitoCS - porcentajeExitoCN
+
+difProporcion
+
+SEproporcion <- sqrt(((probExitoCS*(1- probExitoCS))/cantMuestraCS) + (porcentajeExitoCN * (1 - porcentajeExitoCN))/totalCN)
+SEproporcion
+
+zCritProporcion <- qnorm(0.05, mean = 0, sd = 1,lower.tail = FALSE)
+lowerBoundProp <- difProporcion - zCritProporcion * SEproporcion
+lowerBoundProp
+upperBoundProp <- difProporcion + zCritProporcion * SEproporcion
+upperBoundProp
+```
+
+$$[ 0,1885 ; 0,6035 ]$$
+
+Podemos afirmar con un 95% que la diferencia en la cantidad de atletas de la zona Centro-Sur que mejoraron su promedio al menos en 4.8 segundos, es mayor a la cantidad de atletas de la zona Centro-Norte que tuvieron una mejora de al menos 3.2 segundos,y se encuentra entre 18% y un 60%. 
+
+Por lo tanto, ya que la diferencia de proporciones de éxito resulta siempre mayor que cero en nuestro intervalo de confianza, es cierto que la cantidad de atletas de la zona Centro-Sur que redujeron sus mejores marcas en al menos 4.8 segundos es mayor a la de atletas de la zona Centro-Norte que lo hicieron en al menos 3.2 segundos. 

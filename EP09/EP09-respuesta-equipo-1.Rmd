@@ -1,0 +1,193 @@
+---
+title: "EP09-respuesta-equipo-1"
+date: "2026-01-07"
+output: html_document
+---
+
+
+# EP 9
+
+Un estudio recolectó medidas anatómicas de 247 hombres y 260 mujeres (Heinz et al., 2003). El estudio incluyó nueve mediciones del esqueleto (ocho diámetros y una profundidad de hueso a hueso) y doce mediciones de grosor (circunferencias) que incluyen el tejido. La siguiente tabla detalla las variables registradas en este estudio:
+
+Biacromial.diameter	Diámetro biacromial (a la altura de los hombros)	cm
+Biiliac.diameter	Diámetro biiliaco (a la altura de la pelvis)	cm
+Bitrochanteric.diameter	Diámetro bitrocantéreo (a la altura de las caderas)	cm
+Chest.depth	Profundidad del pecho (entre la espina y el esternón a la altura de los pezones)	cm
+Chest.diameter	Diámetro del pecho (a la altura de los pezones)	cm
+Elbows.diameter	Suma de los diámetros de los codos	cm
+Wrists.diameter	Suma de los diámetros de las muñecas	cm
+Knees.diameter	Suma de los diámetros de las rodillas	cm
+Ankles.diameter	Suma de los diámetros de los tobillos	cm
+Shoulder.Girth	Grosor de los hombros sobre los músculos deltoides	cm
+Chest.Girth	Grosor del pecho, sobre tejido mamario en mujeres y a la altura de los pezones en varones	cm
+Waist.Girth	Grosor a la altura de la cintura	cm
+Navel.Girth	Grosor a la altura del ombligo	cm
+Hip.Girth	Grosor a la altura de las caderas	cm
+Thigh.Girth	Grosor promedio de ambos muslos bajo el pliegue del glúteo	cm
+Bicep.Girth	Grosor promedio de ambos bíceps, brazos flectados	cm
+Forearm.Girth	Grosor promedio de ambos antebrazos, brazos extendidos palmas hacia arriba	cm
+Knee.Girth	Grosor promedio de ambas rodillas, posición levemente flectada, medición arriba de la rótula	cm
+Calf.Maximum.Girth	Grosor promedio de la parte más ancha de ambas pantorrillas	cm
+Ankle.Minimum.Girth	Grosor promedio de la parte más delgada de ambos tobillos	cm
+Wrist.Minimum.Girth	Grosor promedio de la parte más delgada de ambas muñecas	cm
+Age	Edad	Años
+Weight	Peso	Kg
+Height	Estatura	cm
+Gender	Género	1: hombre
+0: mujer
+
+
+Pasos:
+Definir la semilla a utilizar, que corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de menor edad del equipo.
+Seleccionar una muestra aleatoria de 100 mujeres (si la semilla es un número par) o 100 hombres (si la semilla es impar), y separar 70 casos para trabajar en la construcción de modelos y 30 para su evaluación en datos no vistos.
+Seleccionar de forma aleatoria ocho posibles variables predictoras.
+Seleccionar, de las otras variables, una que el equipo considere que podría ser útil para predecir la variable Peso (sin considerar la estatura), justificando bien esta selección.
+Usando el entorno R y paquetes estándares1, construir un modelo de regresión lineal simple con el predictor seleccionado en el paso anterior.
+Usando herramientas estándares1 para la exploración de modelos del entorno R, buscar entre dos y cinco predictores de entre las variables seleccionadas al azar en el punto 3, para agregar al modelo de regresión lineal simple obtenido en el paso 5.
+Evaluar la bondad de ajuste (incluyendo el análisis de casos atípicos y casos influyentes) y la generalidad (condiciones para RLM) de los modelos y “arreglarlos” en caso de que presenten algún problema.
+Evaluar el poder predictivo del modelo con los datos no utilizados para construirlo.
+
+```{r}
+library(car)
+library(dplyr)
+library(leaps)
+
+set.seed(3413)
+
+datos <- read.csv2("EP09 Datos.csv")
+muestra <- datos[datos$Gender == 1, ][sample(sum(datos$Gender == 1), 100), ]
+
+indices_train <- sample(100, size = 0.7 * 100)
+
+train <- muestra[indices_train, ]
+test  <- muestra[-indices_train, ]
+
+respuesta <- "Weight"
+candidatos <- setdiff(colnames(train), c(respuesta, "Gender", "ID"))
+predictores <- sample(candidatos, 8, replace = FALSE)
+predictores
+
+```
+De las otras variables, elegimos "Chest.diameter", que describe el diámetro del pecho a la altura de los pezones. Elegimos esta variable por que existen estudios que indican que la grasa en hombres tiende a acumularse en esta zona implicando un mayor volumen y masa. 
+
+```{r}
+modelo_simple <- lm(Weight ~ Chest.diameter, data = train)
+summary(modelo_simple)
+```
+Vemos que esta variable por si sola aporta bastante al modelo (Pr(>|t|) mucho menor a nivel de significancia), pero posee un coeficiente de determinacion no tan alto R² ajustado = 0,4779, por lo que no se ajusta tan bien a los datos, y podría no representarlos bien.
+
+
+Para elegir las variables a agregar al modelo se usará regresión paso a paso, en específico la selección hacia adelante porque no queremos probar una teoria, solo estamos explorando los datos. En vez de empezar por un modelo nulo, se empieza con la RLS hecha anteriormente. Haremos 5 pasos para agregar las 5 mejores variables que aporten mayor información al modelo que se va construyendo. Se escoje la variable con menor AIC para guiar la busqueda, ya que refleja la complejidad del modelo y queremos seguir el principio de parsimonia.
+
+```{r}
+formula_scope <- as.formula(paste("Weight ~ Chest.diameter +", 
+                                  paste(predictores, collapse = " + ")))
+
+modelo_rlm <- step(modelo_simple, 
+                   scope = list(lower = modelo_simple, upper = formula_scope), 
+                   direction = "forward", 
+                   trace = 1, 
+                   steps = 5)
+
+summary(modelo_rlm)
+```
+
+Se obtuvo un modelo con 6 variables predictoras, incluyendo "Chest.diameter" con un coeficiente de determinacion de 0.8794, mucho mayor al obtenido del RLS, por lo que se consiguió un modelo con buen ajuste de datos, sin embargo, "Chest.diameter" parece no aportar significativamente al modelo al estar junto a las demás variables (Chest.diameter (Pr(>|t|) = 0.107).
+
+R² ajustado = 0.8794 nos indica que el modelo con esas variables es capaz de explicar el 87,94% de la variabilidad del peso de las personas en la muestra de entrenamiento. Es un valor alto, lo que sugiere que las variables seleccionadas son determinantes fuertes del peso.
+
+
+Ahora verificamos la confiabilidad del modelo:
+
+1. La variable de salida (peso) es una variable cuantitativa y continua, ya que mide una magnitud fisica.
+
+2. Los predictores son cuantitativos, ya que son mediciones fisicas de un objeto real.
+
+3. Los predictores no son constantes.
+
+4. Cada predictor debe estar relacionado linealmente con la respuesta.
+```{r}
+residualPlots(modelo_rlm)
+```
+Identifcamos que la variable "Calf.Maximum.Girth" presenta una curvatura más prominente que las demás, y esto tambien se puede observar al ver que en la prueba individual Pr(>|Test stat|) obtuvo un valor bastante cercano al nivel de significancia 0.05. Procedemos a obtener una representación gráfica de posibles valores atípicos, el apalancamiento y la distancia de Cook.
+
+```{r}
+influencePlot(modelo_rlm, id = list(cex = 0.7))
+```
+
+Se presentan 4 valores atipicos, con apalancamientos cercanos entre 0.11 y 0.24, tambien todos poseen una distancia de Cook menor al umbral (menos exigente) 1.
+
+La curvatura que vimos en el gráfico de ResidualPlots puede no ser real, sino una consecuencia de estos casos atípicos. Procedemos a eliminar los datos con mayor apalancamiento.
+
+```{r}
+nombres_outliers <- c("103", "222")
+
+train_limpio <- train[ !rownames(train) %in% nombres_outliers, ]
+
+modelo_arreglado <- update(modelo_rlm, data = train_limpio)
+
+residualPlots(modelo_arreglado)
+```
+Podemos apreciar que la eliminación de los casos de mayor apalancamiento ("103", "222") corrigió exitosamente el problema de linealidad detectado previamente en la variable "Calf.Maximum.Girth".
+
+La prueba de curvatura para esta variable arrojaba un valor 0.07, cercano al nivel de significancia. Tras la rectificación, el nuevo valor es 0.305.
+
+
+5. La distibución de los residuos debe ser cercana a la normal centrada en cero.
+
+6. La variabilidad de los residuos debe ser aproximadamente constante (homocedasticidad)
+
+```{r}
+ncvTest(modelo_arreglado)
+```
+El p-value es 0.764, lo que es mayor que el nivel de significancia (0.05), por lo que no existe evidencia suficiente para rechazar la hipótesis de homocedasticidad. Por lo tanto, se asume que la variabilidad de los residuos es aproximadamente constante.
+
+
+7. Los residuos deben ser independientes entre sí.
+
+```{r}
+durbinWatsonTest(modelo_arreglado)
+```
+Como el p-value es 0.798, mayor al nivel de significancia (0.05), no existe evidencia suficiente para rechazar la independencia entre los residuos. Además el estadístico D-W tiene un valor de 1.970302 y un valor cercano a 2 indica ausencia total de autocorrelación.
+
+
+8. No debe existir multicolinealidad.
+
+```{r}
+vif(modelo_arreglado)
+```
+Como los valores rondan entre 1.1 y 2.1, los predictores son lo suficientemente independientes entre sí para que el modelo sea estable.
+
+
+A continuación, se pondrá a prueba el modelo con los datos no utilizados para construirlo para evaluar su poder predictivo usando validacion cruzada dejando uno afuera.
+
+```{r}
+predicciones_test <- predict(modelo_arreglado, newdata = test)
+
+error_test <- test$Weight - predicciones_test
+
+rmse_test <- sqrt(mean(error_test^2))
+
+mae_test <- mean(abs(error_test))
+
+error_entrenamiento <- summary(modelo_arreglado)$sigma
+
+cat("=== RESULTADOS DE LA EVALUACIÓN FINAL ===\n")
+cat("RMSE en Test (Datos nuevos):      ", round(rmse_test, 3), "kg\n")
+cat("MAE en Test (Error promedio):     ", round(mae_test, 3), "kg\n")
+cat("-----------------------------------------\n")
+cat("Error en Entrenamiento (Sigma):   ", round(error_entrenamiento, 3), "kg\n")
+cat("Diferencia (Test - Entrenamiento):", round(rmse_test - error_entrenamiento, 3), "kg\n")
+```
+Precisión en el "Mundo Real": error absoluto medio (MAE) es de 3.51 kg. Esto indica que, en promedio, el modelo construido se equivoca por unos 3.5 kilos aprox al estimar el peso de una persona desconocida. Sin embargo, considerando que el peso corporal de un adulto varía comúnmente entre 50 y 90 kg, un error promedio de 3.5 kg es bastante aceptable para un modelo lineal.
+
+Evaluación de la generalización (RMSE vs. Sigma):
+
+Error en Entrenamiento (Optimista): 3.902 kg.
+Error en Test (Realista): 4.823 kg.
+
+La Brecha: Existe una diferencia de 0.92 kg. El error aumentó al pasar a datos nuevos.
+
+
+Por otra parte, el incremento en el error no indica necesariamente un fallo del modelo, sino que puede ser influenciado por el efecto de la depuración de valores atípicos realizada en la fase de entrenamiento. Mientras que el entrenamiento se realizó construyendo un modelo que cumpliera todas las condiciones, y fue rectificado con la eliminación de algunos datos, la evaluación final se hizo sobre datos reales no filtrados, y solo 30 de ellos. A pesar de esto, el modelo evita errores severos, lo cual demuestra una capacidad predictiva válida para observaciones nuevas.
+

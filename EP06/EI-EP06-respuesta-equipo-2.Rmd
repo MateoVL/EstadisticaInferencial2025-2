@@ -1,0 +1,149 @@
+---
+title: "EI-EP06-respuesta-equipo-2"
+output: html_document
+date: "2025-09-26"
+---
+
+## Contexto
+
+Un equipo de investigadores del área de interacción humano-información está estudiando si el área temática y el nivel de dificultad del problema de información influyen en el tiempo (en segundos) que toma un usuario en formular una consulta de búsqueda para resolver dicho problema. Para ello, han reclutado a un grupo de participantes voluntarios, asignados aleatoriamente a distintos grupos. Cada participante debe resolver tres problemas de información con diferentes niveles de dificultad: baja, media y alta.
+
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggpubr)
+library(ez)
+library(emmeans)
+library(tidyr)
+
+# Lectura y filtrado de datos
+datos <- read.csv("EP06 Datos.csv")
+# Formato Largo
+compuLargo <- datos[which(datos$area == "Computación"),]
+#Formato Ancho
+compuAncho <- compuLargo %>% pivot_wider(names_from = dificultad, values_from = tiempo)
+
+baja <- compuLargo[which(compuLargo$dificultad == "Baja"),]
+media <- compuLargo[which(compuLargo$dificultad == "Media"),]
+alta <- compuLargo[which(compuLargo$dificultad == "Alta"),]
+```
+
+
+## Pregunta
+
+En este momento, los investigadores buscan determinar si existen diferencias en el tiempo que tardan los usuarios en formular consultas para problemas con diferente nivel de dificultad en el área de computación.
+
+### Formulación de hipótesis 
+
+Sean $t_{B}^{(i)}$,  $t_{M}^{(i)}$ y  $t_{A}^{(i)}$ los tiempos requeridos para la dificultad Baja, Media y Alta respectivamente que le toma a la i-ésima persona formular la pregunta. Denotaremos $d_{X-Y}^{(i)}$ a la diferencia en los tiempos que le toma a la persona formular la pregunta para un problema de dificultad X e Y (es decir, $d_{X-Y}^{(i)} = t_{X}^{(i)} - t_{Y}^{(i)}$) con X e Y $\in$ {B,M,A}
+
+Matemáticamente: 
+
+$$H_0: \mu_{d_{B-M}} = \mu_{d_{B-A}} = \mu_{d_{M-A}} = 0$$
+$$H_A: \exists X,Y \in \{ B, M, A\} , X \neq Y | \mu_d{_{X-Y}} \neq 0$$
+
+Lenguaje Natural: 
+
+$H_0:$ En promedio, no hay diferencias en el tiempo requerido en las diferentes dificultades para formular una pregunta.
+
+$H_a:$ La media de las diferencias en el tiempo requerido para formular una pregunta de un problema difiere en al menos una dificultad.
+
+
+Las condiciones que se deben cumplir son:
+
+- La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales: Ya que el tiempo es una magnitud física, cumple con la escala de la razón, por lo que también cumple con la escala de intervalos iguales.
+
+- Las observaciones son independientes al interior de cada muestra: Ya que los individuos son asignados aleatoriamente a los grupos, se puede asumir razonablemente que el tiempo que le toma a una persona realizar la búsqueda no influye en el tiempo que le toma a otra persona. Además, como las observaciones constituyen menos del 10% de la población total, no influye en la forma de elegir a cada individuo. 
+
+- Se puede suponer razonablemente que las poblaciones de origen siguen una distribución normal: Para verificar esta condición se realizan test de normalidad Shapiro-Wilk y gráficos Q-Q.
+```{r}
+g1 <- ggqqplot(baja, x = "tiempo", y = "dificultad",alpha=0.7,color = "steelblue")
+g1 <- g1 + facet_wrap(~ dificultad)
+g1 <- g1 + rremove("x.ticks") + rremove("x.text")
+g1 <- g1 + rremove("y.ticks") + rremove("y.text")
+g1 <- g1 + rremove("axis.title")
+g1
+```
+
+```{r}
+g2 <- ggqqplot(media, x = "tiempo", y = "dificultad",alpha=0.7,color = "steelblue")
+g2 <- g2 + facet_wrap(~ dificultad)
+g2 <- g2 + rremove("x.ticks") + rremove("x.text")
+g2 <- g2 + rremove("y.ticks") + rremove("y.text")
+g2 <- g2 + rremove("axis.title")
+g2
+```
+```{r}
+g3 <- ggqqplot(alta, x = "tiempo", y = "dificultad",alpha=0.7,color = "steelblue")
+g3 <- g3 + facet_wrap(~ dificultad)
+g3 <- g3 + rremove("x.ticks") + rremove("x.text")
+g3 <- g3 + rremove("y.ticks") + rremove("y.text")
+g3 <- g3 + rremove("axis.title")
+g3
+```
+```{r}
+s_baja <- shapiro.test(baja$tiempo)
+s_media <- shapiro.test(media$tiempo)
+s_alta <- shapiro.test(alta$tiempo)
+if(s_baja$p.value < 0.05 && s_media$p.value < 0.05 && s_alta$p.value < 0.05){
+  cat("Los datos difieren significativamente de una distribución normal")
+}else{
+  cat("Los datos NO difieren significativamente de una distribución normal")
+}
+```
+
+
+- Esfericidad: Para verificar esta condición, llevaremos a cabo un test de ANOVA, que entrega información sobre la esfericidad de los datos en base al test de Mauchly. 
+
+```{r, warning=FALSE}
+ezA <- ezANOVA (data = compuLargo, dv = tiempo, wid = id ,within = dificultad, return_aov = TRUE )
+aovT <- aov(tiempo ~ dificultad + Error(id/dificultad),data=compuLargo)
+print(ezA$`Mauchly's Test for Sphericity`)
+```
+
+Debido a que el valor p asociado a la prueba de Mauchly (0.57) es mayor a 0.05, no se puede descartar que los datos cumplen con la condición de esfericidad.
+
+
+## Resultados prueba ANOVA
+
+Con el procedimiento ANOVA llevado a cabo en el apartado anterior, tenemos la información necesaria para concluir sobre las hipótesis planteadas al inicio del procedimiento. 
+
+```{r}
+print(ezA$ANOVA$p)
+```
+
+Dado que el valor p obtenido es mucho menor a 0.05, con un 95% de confianza se puede rechazar la hipótesis nula en favor de la alternativa. Por lo tanto, existe al menos un par de dificultades para las cuales difiere su media de tiempo. 
+
+Entonces, como no sabemos cuáles dificultades difieren entre ellas, es necesario aplicar procedimientos post-hoc con el fin de determinar para cuáles grupos se presenta esta diferencia. 
+
+## Procedimiento post-hoc
+
+```{r, warning=FALSE}
+medias <- emmeans(aovT, "dificultad")
+print(summary(medias, infer = TRUE, level = 0.95, null = mean(compuLargo[["tiempo"]])))
+```
+Para la dificultad Alta el intervalo de confianza es [90.2,93.2], para la Baja es [88.6,91.7] y para la Media es [87.8, 90.9]. 
+
+```{r}
+hsd <- contrast(medias, method = "pairwise", level = 0.95, adjust = "tukey")
+print(summary(hsd, infer = TRUE))
+```
+
+Para el contraste entre la dificultad Alta y Baja, el intervalo de confianza es [-1.486, 4.58], entre dificultad Alta y Media es [-0.675, 5.39] y entre dificultad Baja y Media es [-2.224, 3.84].
+
+Con el valor p obtenido para cada par de dificultades (todas arriba de 0.05), es posible decir que existe una diferencia entre cada uno. Sin embargo, ésta diferencia se ve acentuada entre la dificultad Alta y Baja, así como entre Media y Baja.
+Se les aplica prueba de contrastes a estos dos pares:
+```{r}
+contrastes <- list("Alta - Media" = c(0,-1,1),
+                   "Alta - Baja" = c(-1,0,1))
+scheffe <- contrast(medias, method = contrastes, level = 0.95, adjust = "scheffe")
+print(summary(scheffe, infer = TRUE))
+```
+
+Finalmente, para el contraste entre la dificultad Alta y Media, el intervalo de confianza es [-3.98, 2.36] mientras que para el contraste entre la dificultad Alta y Baja es [-5.53,0.81]. 
+
+Como ninguna diferencia es significativa, no es posible establecer que exista una relación entre la dificultad de la pregunta realizada por el individuo y el tiempo que le toma plantearla.
+
+Si bien realizamos el procedimiento con ambos ajustes (Tukey y Scheffé) para añadir más información al análisis, toma precedencia aquel con el ajuste de Tukey, ya que como los grupos tienen la misma cantidad de observaciones y se cumplen las condiciones de la prueba ANOVA, la potencia estadística de ésta prueba será mayor. 
+
+Concluyendo, el p-value de la prueba ANOVA para muestras correlacionadas nos dio mucho menor a nuestro nivel de significancia, por lo que asumimos que existe al menos una dificultad en la que su tiempo promedio para formular una pregunta difiere con las demás dificultades. Luego para aportar más información a este resultado se hizo un procedimiento post-hoc para saber qué dificultades difieren en sus medias de tiempo. Dicho resultado fue entre las dificultades: (Alta y Baja) y (Media y Baja), luego para saber cuáles de dichos pares es significativo se les aplicó un test de contraste, lo cual nos arrojó que no son significativas, por lo que al final se puede decir que no es posible establecer que exista una relación entre la dificultad de la pregunta realizada por el individuo y el tiempo que le toma plantearla.

@@ -1,0 +1,53 @@
+---
+title: "Actividad1_EI"
+author: "Mateo Valle y Francisca Cavieres Rojas"
+date: "2025-08-21"
+output: html_document
+---
+
+###Actividad 1
+
+#¿Van los ingresos de las mujeres de la RM incrementándose con la edad?
+
+
+Consensuamos que los estadísticos no son necesarios para concluir sobre la pregunta planteada, ya que se necesita observar la relación entre las variables, para lo cual se requiere el uso de un histograma. Las variables a estudiar son el sexo, la edad, la región y los ingresos totales. Para los ejes del histograma se usarán:
+
+Eje y: Ingresos totales de mujeres en la región Metropolitana
+
+Corresponde a una variable numérica discreta y sigue una escala de razón, dado que parte en el cero verdadero y los intervalos son iguales.
+
+Eje x: Edad de mujeres en la región Metropolitana 
+
+Corresponde a una variable numérica discreta siguiendo una escala ordinal, ya que los intervalos son iguales. 
+
+
+Para comenzar, se realiza la lectura de los datos asociados a la actividad:
+```{r 1} 
+datos <- read.csv2("EP01 Datos Casen 2017.csv")
+
+```
+
+Extraer datos
+```{r 2}
+ingresos_totales = datos$ytot[which(datos$sexo == "Mujer" & datos$region == "Región Metropolitana de Santiago")]
+edad_mujeres = datos$edad[which(datos$sexo == "Mujer" & datos$region == "Región Metropolitana de Santiago")]
+tabla = data.frame(ingresos_totales,edad_mujeres)
+
+```
+
+
+Gráfico
+```{r 3}
+install.packages(ggpubr)
+library ( ggpubr )
+g <- ggscatter(tabla,x = "edad_mujeres",y = "ingresos_totales",title = "Relación entre edad e ingresos de las muejeres de la región metropolitana",xlab= "Edad mujeres de la RM",ylab = "Ingresos totales [CLP]",color = "steelblue",alpha = 0.7)
+
+g
+```
+
+
+```{r 4}
+b = barplot(tapply(ingresos_totales, cut(edad_mujeres, breaks=seq(0,110,10)), mean, na.rm=TRUE))
+b
+```
+

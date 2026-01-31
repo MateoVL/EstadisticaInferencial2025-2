@@ -1,0 +1,85 @@
+---
+title: "EP05"
+output: html_document
+date: "2025-09-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DescTools)
+library(dplyr)
+library (ggpubr)
+library(tidyr) 
+library(ez)
+```
+
+## EP-05
+
+#### Contexto
+En una emocionante competencia de cubos Rubik, participantes de Chile, Argentina, Colombia, Uruguay, Perú y Ecuador demostraron su destreza en resolver tres tipos de cubos: 2x2x2, 3x3x3 y Megaminx.
+
+Después del torneo, un grupo de investigadores de la Asociación Mundial del Cubo, interesado en los tiempos que hicieron las jugadoras y los jugadores en la competencia, decidieron estudiar si el país y el tipo de cubo usado en cada prueba tienen influencia en los segundos que se tardan en resolverlos. Para ello usaron una muestra aleatoria de los datos de la competencia, en la cual participaron más de 2.000 personas, con las siguientes variables: id, pais, tipo, tiempo.
+
+
+#### Pregunta a estudiar
+¿Existen diferencias en el tiempo de resolución de cubos 2x2x2 entre participantes de Uruguay, Perú y Ecuador?
+
+
+#### Procedimiento
+
+Para responder esta pregunta se realizan las siguientes hipotesis:
+
+$H_0$: el tiempo de resolucion promedio de cubos 2x2x2 es igual para los participantes de Uruguay, Perú y Ecuador. Matematicamente $\mu_{tU}=\mu_{tP}=\mu_{tE}$.
+
+$H_a$: el tiempo de resolucion promedio de cubos 2x2x2 difiere para al menos una nacionalidad.
+existe $i,j$ $\in$ {U, P, E}, $i \neq j$ | $\mu_{ti} \neq \mu_{tj}$
+
+
+Condiciones:
+
+1. La escala con la que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales, en esta caso el tiempo para la resolucion cumple con esta escala ya que demorarse un milisegundo mas al tener 3.15 segundos y 8.67 diferentes, implica una demora de la misma magnitud. Ademas sabemos que el tiempo es una unidad física.
+
+2. Las muestras obtenidas son aleatorias e independientes, se asume que el rendimiento de un participante no influye en el de otro ya que compiten de manera separada. Ademas las participantes no representa mas de un 10% de la poblacion total.
+```{r}
+
+```
+
+3. Se puede asumir que las poblaciones siguen una distribucion normal, graficamente las poblaciones siguen aproximadamente una distribucion normal, pero los datos se desvian un poco de una distribucion normal, por lo que seremos mas exigentes con las pruebas usando un nivel de significancia del 0,01.
+
+```{r lecturadatos}
+datos = read.csv2("EP05 Datos.csv")
+datos = datos[datos$tipo == "2x2x2",]
+datos_filtrados = datos[datos$pais == "Uruguay"|datos$pais == "Ecuador"|datos$pais == "Perú",]
+```
+
+```{r p1}
+g <- ggqqplot(datos_filtrados, x = "tiempo", y = "pais", alpha = 0.7, palette = c("steelblue","steelblue1","steelblue4"))
+g <- g + facet_wrap(~ pais)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+g
+```
+
+4. Se cumple homocedasticidad, se usara la prueba de Levene de homogeneidad de varianza para comprobar que se cumpla mas adelante.
+
+#### Prueba ANOVA ómnibus
+```{r p2}
+prueba_ez <- ezANOVA(data = datos_filtrados, dv = tiempo, between = pais,
+                     wid = id, return_aov = TRUE, detailed = TRUE)
+print(prueba_ez)
+```
+Se pude observar en la prueba que, el valor p de la prueba de Levene es 0.79, por lo que se falla en rechazar la hipotesis nula de esta prueba, por lo tanto si se cumple la condicion de homcedasticidad.
+
+Luego el valor p de la prueba anova es demasiado pequeño(1.79e-19), mucho menor a nuestro nivel de significancia establecido(0.01), por lo que rechazamos la hipotesis nula en favor de la alternativa. En consecuencia concluimos con un 99% de confianza que el tiempo de resolucion promedio es diferente para al menos una de las nacionalidades.
+
+Como los tiempos promedios de las nacionalidades es diferente en al menos una, para agregar mas informacion a nuestra respuesta podemos estudiar cual o cuales nacionalidades son las que difieren en sus promedio de tiempo. Para esto se aplica la prueba post-hoc de HSD de Tukey.
+
+#### Prueba Post-hoc HSD de turkey
+```{r p3}
+hsd <- TukeyHSD(prueba_ez$aov, "pais", ordered = TRUE, conf.level = 0.99)
+print(hsd)
+```
+Como se observa en la prueba, todos los pares de paises presentan un valor p menor a 0.01, por lo que todos los paises presentan diferencias significativas entre ellos.
+
+Finalmente, respondiendo a la pregunta: Asumiendo muestras independientes y que siguien una distribucion cercana a la normal, se puede decir con un 99% de confianza de que el tiempo de resolucion promedio del cubo 2x2x2 para los participantes de Uruguay, Perú y Ecuador es diferente, especificamente, el promedio de tiempo difiere entre las tres nacionalidades.

@@ -1,0 +1,357 @@
+---
+title: "EP07-respuesta-equipo-2"
+output: html_document
+date: "2025-11-28"
+---
+
+## Enunciado
+
+En el trabajo de título de una estudiante del DIINF se reportan tiempos de ejecución (en milisegundos) y la cercanía con la solución óptima (en por ciento) de la mejor solución encontrada con tres versiones de un algoritmo genético para resolver instancias del problema del vendedor viajero disponibles en repositorios públicos. Ahora debe enfrentar el análisis de estos datos, por que está solicitando ayuda de las y los estudiantes de Estadística Inferencial.
+
+## Pregunta 1
+
+Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y B en formato ancho. Usando como semilla el valor 13, obtenga muestras aleatorias independientes de 20 tiempos registrados por la versión A y 18 tiempos registrados por la versión B del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+### Lectura de datos
+
+```{r setup, message=FALSE,warning=FALSE}
+library(ggplot2)
+library(ggpubr)
+library(tidyr)
+library(rcompanion)
+library(ez)
+library(car)
+library(knitr)
+library(purrr)
+library(dplyr)
+library(broom)
+
+# Lectura y filtro de datos
+datos <- read.csv("EP07 Datos.csv")
+datosFiltrados <- datos[which(datos$n.nodos >= 70 ),]
+
+# Obtener muestras aleatorias e independientes
+set.seed(13)
+muestraTiempos_A <- sample(datosFiltrados$tiempo.A, 20, replace = FALSE)
+
+muestraTiempos_B <- sample(datosFiltrados$tiempo.B, 18, replace = FALSE)
+```
+
+### Desarrollo
+
+Estamos trabajando con datos independientes y debemos ver diferencias significativas en la eficiencia entre las muestras B y C, que podría expresarse como la media de los tiempos de ejecución. Por lo tanto para responder las dudas de la memorista podríamos aplicar una prueba **t de Student** para muestras independientes.
+
+Vamos a verificar las condiciones para esta prueba:
+
+1. Las observaciones son independientes entre sí: Las muestras se seleccionaron de forma aleatoria e independiente entre sí a partir de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+2. Las observaciones provienen de una distribución cercana a la normal: Para verificar esto se realiza una prueba Shapiro-Wilk y un gráfico Q-Q para normalidad.
+
+```{r}
+qqA <- ggqqplot(data.frame(muestraTiempos_A), x = "muestraTiempos_A", alpha = 0.7)
+qqA
+```
+
+Luego, realizamos una prueba de Shapiro-Wilk
+```{r}
+swA <- shapiro.test(muestraTiempos_A)
+swA
+```
+
+Ahora para la muestra B
+```{r}
+qqB <- ggqqplot(data.frame(muestraTiempos_B), x = "muestraTiempos_B", alpha = 0.7)
+qqB
+```
+
+Luego, realizamos una prueba de Shapiro-Wilk
+```{r}
+swB <- shapiro.test(muestraTiempos_B)
+swB
+```
+
+
+Podemos evidenciar que la muestra A no sigue una distribución parecida a la normal, por lo que no se cumpliría esta condición para la prueba t de student. En estos casos se puede usar la prueba de **suma de rangos de Wilcoxon**, que es una alternativa no paramétrica para t-Student de muestras independientes.
+
+
+Para realizar el análisis estadístico debemos enunciar nuestras hipótesis:
+
+$H_0:$ No hay diferencias significativas en la eficiencia entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+$H_A:$ Hay diferencias significativas en la eficiencia entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+
+Luego verificamos las condiciones para esta prueba:
+
+1. Observaciones de ambas muestras deben ser independientes: Las muestras fueron seleccionadas aleatoriamente e independientes entre ellas.
+
+2. Escala de medición a lo menos ordinal: Como la variable que se está midiendo es el tiempo, que cumple con las características de una escala de razón, se puede concluir que también cumple con ser ordinal. 
+
+
+A continuación, realizamos la prueba de suma de rangos de Wilcoxon para concluir sobre las hipótesis enunciadas.
+
+```{r}
+resultWilcoxSum <- wilcox.test(muestraTiempos_A, muestraTiempos_B, paired = FALSE, alternative = "two.sided", 0, 0.95)
+resultWilcoxSum
+```
+
+Con lo anterior, se observa que si existen diferencias significativas en los tiempos de ejecución de los algoritmos A y B.
+
+De acuerdo al resultado, es posible observar que existe un desplazamiento de las medidas de tendencia central de las poblaciones origen. Por ello, podemos asegurar con 95% que efectivamente existe una diferencia significativa en los tiempos de ejecución de los algoritmos A y B cuando las instancias tienen 70 o más nodos.
+
+
+
+## Pregunta 2
+
+
+La memorista también sospecha que, al comparar las mismas instancias de prueba con iguales características, las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones B y C en formato ancho. Usando como semilla el valor 73, obtengan una muestra aleatoria de 24 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+
+```{r}
+# Obtener muestras aleatorias e independientes
+set.seed(73)
+
+muestraMejores_B <- sample(datosFiltrados$mejor.B, 24, replace = FALSE)
+
+muestraMejores_C <- sample(datosFiltrados$mejor.C, 24, replace = FALSE)
+```
+
+Como estamos trabajando con datos de las mismas instancias y debemos ver diferencias significativas entre los rendimientos de ambas muestras, que podría expresarse como la media de la cercanía a la solución óptima de las mejores soluciones. Por lo tanto para responder las dudas de la memorista podríamos aplicar una **prueba t de student para muestras apareadas**.
+
+Vamos a verificar las condiciones para esta prueba:
+
+1. Los pares de observaciones son independientes entre sí: Cada dato fue elegido aleatoriamente e independiente de la otra muestra de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+2. Las diferencias de observaciones apareadas siguen una distribución cercana a la normal: Para saber si se cumple la condición de normalidad, realizaremos una prueba de normalidad para las diferencias de las observaciones.
+
+```{r}
+dif <- muestraMejores_B - muestraMejores_C
+
+qqDif <- ggqqplot(data.frame(dif),x="dif",alpha=0.7)
+qqDif
+```
+
+Luego, realizamos una prueba de Shapiro-Wilk
+```{r}
+swDif <- shapiro.test(dif)
+swDif
+```
+
+Podemos evidenciar que las diferencias entre las observaciones no siguen una distribución parecida a la normal, por lo que no se cumpliría esta condición para la prueba **t de student**. Sin embargo, es posible utilizar la **prueba de rangos con signo de Wilcoxon para muestras apareadas** como alternativa.
+
+
+Para realizar el análisis estadístico debemos primero enunciar nuestras hipótesis:
+
+$H_0:$ No hay diferencias significativas en los rendimientos de las mejores soluciones encontradas por los versiones B y C del algoritmo.
+
+$H_A:$ Hay diferencias significativas en los rendimientos de las mejores soluciones encontradas por los versiones B y C del algoritmo.
+
+
+Luego verificamos las condiciones para esta prueba:
+
+1. Los pares de observaciones son independientes: Cada dato fue elegido aleatoriamente e independiente de la otra muestra de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+2. La escala de medición empleada para ambas muestras debe ser a lo menos ordinal: Como la variable que se está midiendo es la cercanía a la solución óptima en porcentaje. La diferencia de un x% en cualquier punto de la escala representa el mismo cambio (cercanía a la solución óptima), además se cuenta con un cero absoluto y se pueden realizar operaciones aritméticas, lo que cumple con las características de una escala de razón, se puede concluir que también cumple con ser ordinal.
+
+Como se cumplen ambas condiciones, procedemos a aplicar la prueba sobre los datos.
+
+```{r}
+resultWilcoxSign <- wilcox.test(muestraMejores_B, muestraMejores_C, paired = TRUE, alternative = "two.sided", 0, 0.95)
+resultWilcoxSign
+```
+
+Con el p-value obtenido, es posible asegurar con un 95% de confianza que los mejores tiempos del algoritmo B y C tienen rendimientos similares para las mismas instancias con nodos mayores o iguales a 70.
+
+
+
+## Pregunta 3
+
+
+La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 50 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 43, obtengan muestras aleatorias independientes de 12, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario. 
+
+```{r}
+# Filtro de datos
+datosFiltrados2 <- datos[which(datos$n.nodos >= 50),]
+
+# Obtener muestras aleatorias e independientes
+set.seed(43)
+muestraTiempos_A2 <- sample(datosFiltrados2$tiempo.A, 12, replace = FALSE)
+muestraTiempos_B2 <- sample(datosFiltrados2$tiempo.B, 14, replace = FALSE)
+muestraTiempos_C2 <- sample(datosFiltrados2$tiempo.C, 13, replace = FALSE)
+```
+
+Para responder esta pregunta, queremos conocer si existen diferencias entre la eficiencia de las versiones o bien, cuál/cuáles versiones difieren en sus eficiencias. Este parámetro se puede expresar como la media de los tiempos de ejecución de las versiones. Además podemos decir que los datos son independientes entre sí, por lo que es pertinente usar una prueba **ANOVA para muestras independientes**.
+
+Primero evaluaremos las condiciones de la prueba:
+
+1. Escala variable dependiente (intervalos iguales): Ya que la variable dependiente es el tiempo de ejecución, que corresponde a una magnitud física, se puede asegurar que la escala es de razón. Por lo tanto, cumple con ser de intervalos iguales. 
+
+2. Observaciones independientes al interior de cada muestra: Las muestras fueron seleccionadas aleatoriamente de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+
+3. Suponer distribución normal: Para ello, se relizan gráficos Q-Q y test de Shapiro-Wilk para cada una de las muestras. 
+
+```{r}
+Tiempo <- c(muestraTiempos_A2, muestraTiempos_B2, muestraTiempos_C2) 
+Algoritmo <- c(rep("A", length(muestraTiempos_A2)), 
+               rep("B", length(muestraTiempos_B2)), 
+               rep("C", length(muestraTiempos_C2)))
+Algoritmo <- factor(Algoritmo)
+datosLargos <- data.frame(Algoritmo, Tiempo)
+
+qqTiempos <- ggqqplot(datosLargos, x = "Tiempo", y = "Algoritmo", color = "Algoritmo",alpha = 0.7, palette = c("steelblue","steelblue1","steelblue4"))
+qqTiempos <- qqTiempos + facet_wrap(~ Algoritmo)
+qqTiempos <- qqTiempos + rremove("x.ticks") + rremove("x.text")
+qqTiempos <- qqTiempos + rremove("y.ticks") + rremove("y.text")
+qqTiempos <- qqTiempos + rremove("axis.title")
+print(qqTiempos)
+```
+
+Pruebas de Shapiro-Wilk
+```{r}
+swA2 <- shapiro.test(muestraTiempos_A2)
+swB2 <- shapiro.test(muestraTiempos_B2)
+swC2 <- shapiro.test(muestraTiempos_C2)
+if(swA2$p.value >= 0.05 && swB2$p.value >= 0.05 && swC2$p.value >= 0.05){
+  cat("\nSiguen una distribución cercana a la normal\n")
+}else{
+  cat("\nNo siguen una distribución cercana a la normal\n")
+}
+```
+
+Por lo tanto, podemos asegurar que la tercera condición no se cumple, pues al menos una de las muestras no cumple con acercarse a una distribución normal.
+
+
+4. Esfericidad: Hacemos prueba de esfericidad de Levene.
+
+```{r}
+lev_test <- leveneTest(Tiempo ~ Algoritmo , datosLargos)
+homogeneidad_var <- tidy(lev_test) |> rename("Chi^2" = statistic)
+cat(paste0("", kable(homogeneidad_var, digits = 3, format = "simple")), sep = "\n")
+```
+
+De acuerdo al valor p obtenido que es mayor a 0.05 que es el nivel de significancia de esta prueba, se concluye que las muestras cumplen con la condición de homocedasticidad.
+
+
+Como no se cumple la condicion de normalidad, el tamaño de las muestras es distinto y tenemos más de dos muestras trabajemos con la prueba de **Kruskal-Wallis**.
+
+Primero veremos si se cumplen las condiciones de esta prueba:
+
+1. Escala de variable dependiente al menos ordinal: Ya que la variable dependiente es el tiempo de ejecución, que corresponde a una magnitud física, se puede asegurar que la escala es de razón. Por lo tanto, cumple con ser ordinal.
+2. Observaciones independientes: Las muestras fueron seleccionadas aleatoriamente de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+3. Variable independiente con al menos dos niveles: La variable independiente sería la versión del algoritmo, en este caso tenemos la versión A, B y C (tres niveles).
+
+Como se cumplen las condiciones, procedemos a plantear las hipótesis:
+
+$H_0:$ Todas las versiones del algoritmo son igual de eficientes (las distribuciones del tiempo de ejecución de cada version del algoritmo son las mismas).
+
+$H_A:$ Al menos una de las versiones del algoritmo difiere en la eficiencia con alguna otra version.
+
+Luego se realiza el test de Kruskal-Wallis a los datos:
+```{r}
+kruskalTest <- kruskal.test(Tiempo ~ Algoritmo, data = datosLargos)
+kruskalTest
+```
+
+Como el p-value de la prueba nos dio menor a su nivel de significancia (0.05), se puede decir con un 95% de confianza que al menos una de las versiones difiere con la eficiencia de alguna de las demás.
+
+Para aportar más información a esta respuesta, podemos hacer un procedimiento Post-Hoc:
+
+```{r}
+ph1 <- pairwise.wilcox.test(datosLargos[["Tiempo"]], datosLargos[["Algoritmo"]], p.adjust.method = "holm", paired = FALSE, exact = FALSE)
+ph1 <- tidy(ph1) |> rename(Grupo1 = group2, Grupo2 = group1) |> arrange(Grupo1) |> relocate(Grupo1)
+cat(paste0("", kable(ph1, digits = 3, format = "simple")), sep = "\n")
+```
+
+Entonces, concluyendo del resultado de la prueba post-hoc con el método de Holm, podemos decir que hay una diferencia significativa en las eficiencias entre las versiones A y B y entre las versiones B y C, por lógica de transitividad, podemos decir que la eficiencia de la versión B del algoritmo difiere con las demás (version puede ser mejor o peor que las demás).
+
+
+
+## Pregunta 4
+
+
+La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 16, obtengan una muestra aleatoria de 22 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Obtener muestras aleatorias e independientes
+set.seed(16)
+muestraMejores_A2 <- sample(datosFiltrados2$mejor.A, 22, replace = FALSE)
+muestraMejores_B2 <- sample(datosFiltrados2$mejor.B, 22, replace = FALSE)
+muestraMejores_C2 <- sample(datosFiltrados2$mejor.C, 22, replace = FALSE)
+```
+
+Para responder esta pregunta, queremos conocer si existen diferencias entre los rendimientos de las verisones o cuál/cuáles versiones difieren en sus rendimientos, el rendimiento se puede expresar como la media de las mejores soluciones de las versiones. Además podemos decir que los datos están correlacionados, ya que se comparan las mismas instancias con iguales características, por lo que es pertinente usar una prueba **ANOVA para muestras correlacionadas**.
+
+Primero evaluaremos las condiciones de la prueba:
+
+1. Escala variable dependiente (intervalos iguales): Como la variable dependiente es la cercanía a la solución óptima en porcentaje. La diferencia de un x% en cualquier punto de la escala representa el mismo cambio(cercanía a la solución óptima), además se cuenta con un cero absoluto y se pueden realizar operaciones aritméticas, lo que cumple con las características de una escala de razón, se puede concluir que también cumple con ser de intervalos iguales.
+
+2. Observaciones independientes al interior de cada muestra: Las muestras fueron seleccionadas aleatoriamente de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+
+3. Suponer distribución normal: Para ello, se realizan gráficos Q-Q y test de Shapiro-Wilk para cada una de las muestras. 
+
+```{r}
+Rendimiento <- c(muestraMejores_A2, muestraMejores_B2, muestraMejores_C2) 
+Algoritmo <- c(rep("A", length(muestraMejores_A2)), 
+               rep("B", length(muestraMejores_B2)), 
+               rep("C", length(muestraMejores_C2)))
+Algoritmo <- factor(Algoritmo)
+Caso <- rep(1:22, 3)
+datosLargosMejores <- data.frame(Caso, Algoritmo, Rendimiento)
+
+qqRendimiento <- ggqqplot(datosLargosMejores, x = "Rendimiento", y = "Algoritmo", color = "Algoritmo", alpha = 0.7, palette = c("steelblue","steelblue1","steelblue4"))
+qqRendimiento <- qqRendimiento + facet_wrap(~ Algoritmo)
+qqRendimiento <- qqRendimiento + rremove("x.ticks") + rremove("x.text")
+qqRendimiento <- qqRendimiento + rremove("y.ticks") + rremove("y.text")
+qqRendimiento <- qqRendimiento + rremove("axis.title")
+print(qqRendimiento)
+```
+
+Pruebas de Shapiro-Wilk
+```{r}
+swMejoresA2 <- shapiro.test(muestraMejores_A2)
+swMejoresB2 <- shapiro.test(muestraMejores_B2)
+swMejoresC2 <- shapiro.test(muestraMejores_C2)
+if(swMejoresA2$p.value >= 0.05 && swMejoresB2$p.value >= 0.05 && swMejoresC2$p.value >= 0.05){
+  cat("\nSiguen una distribución cercana a la normal\n")
+}else{
+  cat("\nNo siguen una distribución cercana a la normal\n")
+}
+```
+
+Por lo tanto, podemos asegurar que la tercera condición no se cumple, pues al menos una de las muestras no cumple con acercarse a una distribución normal.
+
+
+4. Esfericidad: Hacemos prueba de esfericidad de Levene.
+
+```{r}
+lev_testMejores <- leveneTest(Rendimiento ~ Algoritmo , datosLargosMejores)
+homogeneidad_varMejores <- tidy(lev_testMejores) |> rename("Chi^2" = statistic)
+cat(paste0("", kable(homogeneidad_varMejores, digits = 3, format = "simple")), sep = "\n")
+```
+
+De acuerdo al valor p obtenido que es mayor a 0.05 que es el nivel de significancia de esta prueba, se concluye que las muestras cumplen con la condición de homocedasticidad.
+
+
+Como no se cumple la condición de normalidad, el tamaño de las muestras es el mismo y tenemos más de dos muestras trabajemos con la **prueba de Friedman**.
+
+Primero veremos si se cumplen las condiciones de esta prueba:
+
+1. Escala de variable dependiente al menos ordinal: Como la variable que se está midiendo es la cercanía a la solución óptima en porcentaje. La diferencia de un x% en cualquier punto de la escala representa el mismo cambio(cercanía a la solución óptima), además se cuenta con un cero absoluto y se pueden realizar operaciones aritméticas, lo que cumple con las características de una escala de razón, se puede concluir que también cumple con ser ordinal.
+2. Observaciones independientes: Las muestras fueron seleccionadas aleatoriamente de una población con datos independientes, ya que se tratan de ejecuciones distintas.
+3. Variable independiente con al menos dos niveles: La variable independiente sería la versión del algoritmo, en este caso tenemos la versión A, B y C (tres niveles).
+
+Como se cumplen las condiciones, procedemos a plantear las hipótesis:
+
+$H_0:$ Todas las versiones del algoritmo tienen el mismo rendimiento (las distribuciones de la cercanía a la solución óptima de cada versión del algoritmo son las mismas).
+
+$H_A:$ Al menos una de las versiones del algritmo difiere en el rendimiento con alguna otra versión.
+
+Luego se realiza el test de Friedman a los datos:
+```{r}
+FriedmanTest <- friedman.test(Rendimiento ~ Algoritmo | Caso, data = datosLargosMejores)
+FriedmanTest
+```
+
+Como el p-value de la prueba nos dio mayor a su nivel de significancia (0.05), se puede decir con un 95% de confianza que se falla en rechazar la hipótesis nula de la prueba, lo que quiere decir que las tres versiones del algoritmo tienen un rendimiento similar.
+

@@ -1,0 +1,179 @@
+---
+title: "EI-EP04-respuesta-equipo-10"
+author: "Grupo 10"
+date: "2025-09-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library (dplyr)
+library (RVAideMemoire)
+library (tidyr)
+library(rcompanion)
+```
+
+```{r lectura}
+datos <- read.csv2("EP04 Datos.csv")
+```
+
+## EP04
+
+### Pregunta 1
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+Indicación: obtenga la muestra de 50 personas a partir del archivo “EP04 Datos.csv” que se encuentra en el directorio compartido, usando la semilla 102. Considere un nivel de significación α=0,05.
+
+Para poder responder a la pregunta se realizara una prueba Q de Cohan.
+Condiciones:
+- La variable de respuesta es dicotomica
+- La variable independiente es categorica
+- Las observaciones son independientes entre si por el enunciado
+- La muestra nb * nt es mayor o igual 24
+
+Primero la variable de respuesta es dicotómica (dos posibles valores aceptación (A) y rechazo (R), luego la variable independiente es categórica(eleccion de tres anuncios). Se asume que las observaciones son independientes, y que el voto de uno no influye en el de otro y que se realizaron las encuenstas separadamente. nb es la cantidad de bloques: 1500, nt es la cantidad de tratamientos: 3 dandonos un total de 4500 observaciones, mucho mayor a 24, por lo que todas las condiciones se cumplen para aplicar la prueba de Cochran.
+
+Con un nivel de signifiancia de 5%, las hipotesis son:
+
+- $H_0$: Proporción de aceptacion es la misma en las tres estretegias.
+- $H_A$: Proporción de aceptacion difiere en al menos una de las 3 estrategias.
+
+```{r p1}
+instancia <- 1:1500
+est_1 <- datos$estrategia_1
+est_2 <- datos$estrategia_2
+est_3 <- datos$estrategia_3
+
+datos_anchos <- data.frame(instancia,est_1,est_2,est_3)
+datos_largos <- datos_anchos|>
+  pivot_longer(c("est_1","est_2","est_3"),
+               names_to = "estrategias_de_marketing", values_to = "resultado") |>
+  mutate_at(c("instancia","estrategias_de_marketing"), as.factor)
+
+tam_min <- 24
+alfa <- 0.05
+
+N <- nrow (datos_anchos [, -1]) * ncol (datos_anchos [, -1])
+
+prueba_qc <- cochran.qtest(resultado ~ estrategias_de_marketing | instancia, 
+                           data = datos_largos, alpha = alfa)
+
+prueba_qc
+
+```
+Luego de realizar la prueba Q de Cochran, se obtiene un valor p de 0.50, lo cual es mayor que el alfa definido de 0.05, esto quiere decir que no hay evidenciqa suficiente para rechazar la hipotesis nula, es decir que con un 95% de confianza ninguna de las estrategias difiere.
+
+
+### Pregunta 2
+
+Se llevó a cabo una encuesta para investigar si hay una distribución homogénea de pasatiempos favoritos entre dos grupos de personas: hombres y mujeres. Se seleccionaron aleatoriamente 30 personas de cada grupo y se les preguntó sobre sus pasatiempos favoritos, obteniéndose que entre los hombres 9 prefieren actividades relacionadas con la lectura, 14 con el deporte y 7 con música; mientras que entre las mujeres 7 se inclinan por actividades relacionadas con la música, 5 con la lectura y 18 con deportes.
+¿Existe evidencia suficiente para concluir que la distribución de los pasatiempos favoritos es la misma entre hombres y mujeres?
+
+Para responder a la pregunta se realiza un prueba Chi-.cuadrado de homogeneidad, para comprobar si distribucion de pasatiempos favoritos es igual para hombres y mujeres. Para esto verificamos la condiciones:
+
+- Las observaciones son independientes. Esto se puede deducir a traves del enunciado que dice que se seleccionarion aleatoriamente y asumimos que la encuesta se realizao de manera separada.
+- Se cumple que hay al menos 5 observaciones en cada grupo.
+
+Con un nivel de signifiancia de 5%, las hipotesis son:
+
+- $H_0$: La proporcion de pasatiempos favoritos entre hombres y mujeres es igual
+- $H_A$: La proporcion de pasatiempos favoritos entre hombres y mujeres difiere.
+
+```{r p2}
+hombres <- c(9,14,7)
+mujeres <- c(5,18,7)
+
+tabla <- as.table(rbind(hombres,mujeres))
+dimnames(tabla) <- list(sexo = c("hombres", "mujeres"),
+                        pasatiempo = c("Lectura", "Deporte", "Musica"))
+
+sumas_filas <- apply(tabla, 1, sum)
+sumas_columnas <- apply(tabla, 2, sum)
+suma_total <- sum(tabla)
+
+esperadas <- outer(sumas_filas, sumas_columnas, "*") / suma_total
+esperadas <- round(esperadas,1)
+dimnames(esperadas) <- list(sexo = c("hombres", "mujeres"),
+                        pasatiempo = c("Lectura", "Deporte", "Musica"))
+
+prueba_chi <- chisq.test(tabla)
+
+print(tabla)
+
+print(esperadas)
+
+print(prueba_chi)
+
+```
+
+Como se puede apreciar, al hacer la prueba chi-cuadrado de homogeneidad, se puede observar que se obtuvo un valor p de 0.439, el cual es mayor que el valor de significancia 0.05, por lo que se puede decir con un 95% de confianza que no hay evidencia suficiente para rechazar la hipotesis nula. Respondiendo a la pregunta hay evidencia suficiente para concluir que la distribucion de los pasatiempos favoritos es la misma en hombres y mujeres.
+
+### Pregunta 3
+
+Se realiza un estudio sobre las preferencias de consumo de dos tipos de chocolate, “Chocolate Blanco” y “Chocolate Negro”, entre dos grupos etarios distintos: personas adultas y personas menores de edad (niños, niños y adolecentes). Después de entrevistar a un total de 13 adultos y 17 menores de edad, se encontró que 2 personas adultas y 9 menores prefieren el chocolate negro.
+¿El tipo de chocolate preferido está influenciado por el grupo etario de las consumidoras y los consumidores?
+
+Para responder esta pregunta, se realizará una prueba exacta de Fisher para analizar la asociación entre nuestras dos variables dicotomicas: tipo de chocolate(Blanco o Negro) y grupo etáreo(Mayor o Menor de edad).
+
+Se cumple que las variables sean dicotomicas, vamos a suponer que las encuesta se hicieron de forma separada para asegurar que la respuesta de uno no afecte a la de otro, por lo que las observaciones se toman como independientes. Finalmente la tabla y el tamaño de las observaciones no son tan grandes, por lo que es factible hacxer esta prueba.
+
+Con un nivel de signifiancia de 5%, las hipotesis son:
+
+- $H_0$: Las variables no tienen ningún tipo asociación.
+- $H_A$: Las variables están relacionadas de alguna forma.
+
+```{r p3}
+grupo_etareo <- c(rep("Adulto", 11),# adultos que prefieren blanco
+                  rep("Adulto", 2), # adultos que prefieren negro
+                  rep("Menor", 8),  # menores que prefieren blanco
+                  rep("Menor", 9))  # menores que prefieren negro
+
+tipo_chocolate <- c(rep("Blanco", 11), 
+                    rep("Negro", 2), 
+                    rep("Blanco", 8), 
+                    rep("Negro", 9))
+
+datos <- data.frame(grupo_etareo, tipo_chocolate)
+tabla <- xtabs(~., datos)
+
+prueba_fisher <- fisher.test(tabla)
+
+print(tabla)
+cat("\n")
+print(prueba_fisher)
+```
+Para la prueba exacta de fisher, obtuvimos un valor p de 0.0057, levemente mayor a nuestro nivel de significancia, por lo que con un 95% de confianza podemos decir que las variables son independientes. Como nuestro valor p se acerca mucho al nivel de significancia, lo prudente seria usar otro nivel de significancia más estricto o bien considerar una muestra más grande para obtener una respuesta mas conscisa.
+
+
+### Pregunta 4
+
+Una organización dedicada a la rehabilitación de villanos ha observado que muchos de ellos ingresan al programa con niveles elevados de hostilidad. Para abordar este problema, decidieron implementar un nuevo programa de bienvenida diseñado para reducir la hostilidad y facilitar la reintegración a la sociedad. Para evaluar la efectividad de este programa, se reclutó a un grupo de 40 villanos a quienes se les midió el nivel de hostilidad (alto o bajo) antes y después de participar en el programa de bienvenida. Los resultados se presentan a continuación:
+
+- 8 villanos no mostraron hostilidad ni antes ni después.
+- 8 villanos que inicialmente mostraban hostilidad dejaron de hacerlo.
+- 20 villanos mantuvieron un elevado nivel de hostilidad.
+- 4 villanos que no mostraban hostilidad después del programa se volvieron hostiles.
+
+¿Qué se puede concluir acerca de la efectividad del nuevo programa de bienvenida para reducir la hostilidad en los villanos?
+
+Para responder la pregunta planteada se decide aplicar una preuba de Mcnemar. Para esto se necesitan mustras indendientes con frecuencias apareadas. Lo cual por el enunciado podemos decir que se cumple.
+
+Con un nivel de signifiancia de 5%, las hipotesis son:
+
+- $H_0$: No hay cambios significativos en la hostilidad de los villanos luego del programa
+- $H_A$: Si hay cambios significativos en la hostilidad de los villanos luego del programa
+
+```{r p4}
+villanos <- seq(1:40)
+modelo_1 <- c(rep("Hostil",28), rep("No Hostil", 12))
+modelo_2 <- c(rep("Hostil",20),rep("No Hostil",8), rep("Hostil", 4), rep("No Hostil", 8))
+
+tabla <- table(modelo_2, modelo_1)
+tabla
+
+prueba_mc <- mcnemar.test(tabla, correct = FALSE)
+prueba_mc
+```
+
+Una vez realizada la prueba de Mcnemar se obtuvo un valor p de 0.248, por lo que con un 95% de confianza podemos decir que no hay datos suficientes para rechazar la hipotesis nula, lo que quiere decir que no hay cambios significatios en la hostilidad de los villanos luego del programa. 
